@@ -1,0 +1,13 @@
+{
+  "finrl_signal": {
+    "name": "FinRL Trade Signal",
+    "description": "Today's buy/sell/hold signal (shares, hmax=100) and current simulated position for a DOW 30 ticker from five DRL agents (A2C, DDPG, PPO, TD3, SAC) trained in Phase 2.",
+    "category": "FinRL",
+    "type": "table",
+    "endpoint": "finrl/signal",
+    "params": [
+      { "paramName": "ticker", "value": "AAPL", "label": "Ticker", "type": "text", "description": "DOW 30 ticker symbol" }
+    ],
+    "data": { "table": { "showAll": true } }
+  }
+}

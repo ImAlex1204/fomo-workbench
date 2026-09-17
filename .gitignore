@@ -1,0 +1,10 @@
+envs/
+FinRL/
+finrl-work/
+FinGPT/
+__pycache__/
+.env
+node_modules/
+ui/dist/
+*.dmg
+*.log
