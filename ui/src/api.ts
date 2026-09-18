@@ -51,3 +51,27 @@ export async function* chat(message: string): AsyncGenerator<ChatEvent> {
     }
   }
 }
+
+// ---- Fundamentals tab (Phase 9) ----
+export type Profile = { name?: string; sector?: string; industry_category?: string; long_description?: string; employees?: number;
+  hq_address_city?: string; hq_state?: string; hq_country?: string; stock_exchange?: string; market_cap?: number; currency?: string }
+export type Metrics = { pe_ratio?: number; dividend_yield?: number; beta?: number }  // dividend_yield is already a percent
+export type EpsTrend = { ticker: string; actual: { date: string; eps: number; estimate: number | null }[];
+  estimates: { period: string; date: string | null; eps: number; low: number; high: number; analysts: number }[] }
+
+export async function fetchProfile(ticker: string): Promise<Profile> {
+  return (await json<{ results: Profile[] }>(`${OPENBB}/api/v1/equity/profile?symbol=${ticker}&provider=yfinance`)).results[0]
+}
+export async function fetchMetrics(ticker: string): Promise<Metrics> {
+  return (await json<{ results: Metrics[] }>(`${OPENBB}/api/v1/equity/fundamental/metrics?symbol=${ticker}&provider=yfinance`)).results[0]
+}
+/** Trailing-twelve-month EPS = sum of the last four quarterly diluted EPS (yfinance metrics has no EPS field). */
+export async function fetchEpsTtm(ticker: string): Promise<number | null> {
+  const d = await json<{ results: { period_ending: string; diluted_earnings_per_share?: number | null }[] }>(
+    `${OPENBB}/api/v1/equity/fundamental/income?symbol=${ticker}&provider=yfinance&period=quarter`)
+  const q = d.results.filter(r => r.diluted_earnings_per_share != null).sort((a, b) => b.period_ending.localeCompare(a.period_ending)).slice(0, 4)
+  return q.length === 4 ? q.reduce((s, r) => s + (r.diluted_earnings_per_share as number), 0) : null
+}
+export async function fetchEpsTrend(ticker: string): Promise<EpsTrend> {
+  return json<EpsTrend>(`${BACKEND}/fundamentals/eps_trend/${ticker}`)
+}

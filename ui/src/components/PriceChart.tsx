@@ -24,8 +24,10 @@ export default function PriceChart({ bars }: { bars: Bar[] }) {
     candles.setData(bars.map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close })))
     volume.setData(bars.map(b => ({ time: b.date, value: b.volume, color: b.close >= b.open ? 'rgba(38,166,154,.35)' : 'rgba(239,83,80,.35)' })))
     c.timeScale().fitContent()
+    const ro = new ResizeObserver(() => c.timeScale().fitContent())  // re-fit if mounted while the tab was hidden
+    ro.observe(box.current)
     chart.current = c
-    return () => { c.remove(); chart.current = null }
+    return () => { ro.disconnect(); c.remove(); chart.current = null }
   }, [bars])
 
   return <div ref={box} className="h-full w-full" />

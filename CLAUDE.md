@@ -246,6 +246,29 @@
 - 途中修正：Gemini 免費層偶發 503/429，`agent/loop.py` 加了 4 次重試（5/15/30 秒退避），避免 FinGPT 跑完 1.5 分鐘後被一個暫時性錯誤作廢。**改 `agent/` 或 `openbb-backend/` 的程式後，要在 ODP Desktop 把該服務 Stop → Start**（沒有 auto-reload）；改 `ui/` 要 `npm run build`。
 - `.claude/launch.json` 仍保留給 Claude Code session 開發用；日常使用只靠 ODP Desktop。
 
+## Phase 9：Dashboard「基本面」分頁（三張卡）
+
+任務簡報來源：`phase9-fundamentals-cards.md`（使用者提供，原文以 Streamlit 寫成，已依 Phase 6 的 React 架構翻譯）。範圍：新增「基本面」分頁，內含公司概況、關鍵指標、EPS 趨勢三張卡；美股。股利卡／財報行事曆／分析師評等分布、其他分頁（技術面／消息面／籌碼面／財務報表）不在此範圍。
+
+**狀態：已於 2026-09-18 完成**。
+
+**分頁機制**：`ui/src/App.tsx` 加了 `tab` 狀態與分頁列（`AI Analysis` / `Fundamentals`，走 `i18n.ts`）；原本三個面板原封不動包進 AI 分頁。**兩個分頁都保持掛載、用 `hidden` 切換**（不是條件渲染），這樣切分頁時聊天紀錄與圖不會消失。之後加分頁 = `Tab` 型別加一個值、分頁列陣列加一項、加一個 `<main>`。
+
+**卡片與資料（都先實際呼叫印過 schema 再寫）**：
+| 卡 | 檔案 | 資料 | 備註 |
+|---|---|---|---|
+| 公司概況 | `ui/src/components/fundamentals/CompanyProfile.tsx` | `openbb-api /equity/profile`（yfinance） | `name, sector, industry_category, long_description, employees, hq_*, stock_exchange, market_cap`；簡介取前兩句（句尾判定以「. 」且相隔 ≥40 字，避免 "Apple Inc." 被當句尾） |
+| 關鍵指標 | `KeyMetrics.tsx` | `/equity/fundamental/metrics`（P/E、殖利率、Beta）+ `/equity/fundamental/income?period=quarter`（EPS TTM） | **`dividend_yield` 已是百分比**（AAPL 0.32、KO 2.41），不要再 ×100。yfinance metrics **沒有 EPS 欄位**，EPS TTM = 近四季 `diluted_earnings_per_share` 加總（AAPL 8.72 vs yfinance trailingEps 8.83，差在股數口徑；KO 3.33 相同） |
+| EPS 趨勢 | `EpsTrend.tsx` + **`openbb-backend/widgets/eps_trend.py`** | `GET /fundamentals/eps_trend/{ticker}` → 8 季實際（含當季分析師預估）+ 未來 2 季共識預估 | **這張卡的資料不經 openbb-api**（例外，見下）。Lightweight Charts 兩條 LineSeries：實際實線（accent）、預估虛線（`LineStyle.Dashed`），預估線從最後一個實際點接出；`+1q` 沒有日期 → 前一點 +91 天畫在時間軸 |
+
+**為什麼卡三直接用 `yfinance` 套件（2026-09-18 決策 A）**：openbb-api 的 yfinance provider 沒有 EPS 歷史（`/fundamental/historical_eps` 只支援 alpha_vantage/fmp，要金鑰）也沒有 EPS 預估（`/estimates/consensus` 的 yfinance 版只有目標價與評等；`/estimates/forward_eps` 只支援 fmp/intrinio/seeking_alpha）。但 yfinance 套件本身的 `earnings_dates` / `earnings_estimate` 有完整資料。依「延伸與維護原則」的「ODP 缺的那一小塊直接用 yfinance 抓」處理，獨立成一個 widget 檔。其他兩張卡仍全部經 openbb-api。
+
+**yfinance 版本**：`envs/finrl`（backend 的環境）原本解析到 0.2.58，其 `earnings_dates` 資料停在 2025-05；升到 1.7.0 會讓 FinRL 的 `YahooDownloader` 壞掉（1.x 移除 `proxy` 參數，守則 #4 不改上游）。**釘在 0.2.66**：財報資料完整且 `YahooDownloader` 正常，lockfile 已更新。
+
+**圖表在隱藏分頁掛載的問題**：Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，切回來時間軸是塌的；`EpsTrend.tsx` 與 `PriceChart.tsx` 各加了 `ResizeObserver → fitContent()`。
+
+**驗收**：AAPL／KO 兩支在 EN／繁中下三張卡都正確；AI 分頁功能不變；正式版（`npm run build` → 8001）已確認。改了 backend 需在 ODP Desktop 重啟 `openbb-backend`（已做）。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。
