@@ -18,10 +18,28 @@ async function json<T>(url: string): Promise<T> {
   return r.json()
 }
 
-export async function fetchHistory(ticker: string): Promise<Bar[]> {
-  const start = new Date(Date.now() - 365 * 86400e3).toISOString().slice(0, 10)
-  const d = await json<{ results: Bar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${ticker}&provider=yfinance&start_date=${start}`)
-  return d.results
+// Chart ranges -> yfinance interval + lookback. Intraday ranges are polled while the market is open.
+export type Range = '1D' | '1W' | '1M' | '3M' | '1Y' | '5Y' | 'MAX'
+export const RANGES: Record<Range, { interval: string; days: number; intraday?: boolean }> = {
+  '1D': { interval: '1m', days: 6, intraday: true },   // yfinance keeps ~7 days of 1m; we show the last session
+  '1W': { interval: '5m', days: 8, intraday: true },
+  '1M': { interval: '1d', days: 31 },
+  '3M': { interval: '1d', days: 93 },
+  '1Y': { interval: '1d', days: 366 },
+  '5Y': { interval: '1W', days: 5 * 366 },
+  'MAX': { interval: '1M', days: 60 * 366 },
+}
+
+export async function fetchHistory(ticker: string, range: Range = '1Y'): Promise<Bar[]> {
+  const { interval, days } = RANGES[range]
+  const start = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10)
+  const d = await json<{ results: Bar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${ticker}&provider=yfinance&start_date=${start}&interval=${interval}`)
+  const bars = d.results
+  if (range === '1D' && bars.length) {  // last trading session only
+    const day = bars[bars.length - 1].date.slice(0, 10)
+    return bars.filter(b => b.date.startsWith(day))
+  }
+  return bars
 }
 
 export async function fetchQuote(ticker: string): Promise<Quote> {

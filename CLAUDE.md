@@ -269,6 +269,17 @@
 
 **驗收**：AAPL／KO 兩支在 EN／繁中下三張卡都正確；AI 分頁功能不變；正式版（`npm run build` → 8001）已確認。改了 backend 需在 ODP Desktop 重啟 `openbb-backend`（已做）。
 
+## Phase 10A：價格圖區間切換 + 盤中分鐘級更新
+
+**狀態：已於 2026-09-18 完成**。使用者問「能不能即時走勢與月／年 K」，討論後決定分兩步：A（本節，全部經 openbb-api）先做；B（秒級跳動，用 yfinance 套件的 `WebSocket` 串流轉 SSE，屬 eps_trend 那種例外）保留為可選。
+
+- **區間列**（`ui/src/components/RangeBar.tsx`，在價格面板標題右側）：`1D · 1W · 1M · 3M · 1Y · 5Y · MAX`，每個區間對應一組 yfinance `interval`（表在 `api.ts` 的 `RANGES`）：1D=1 分K（yfinance 只保留約 7 天，取最後一個交易日）、1W=5 分K（約 60 天上限）、1M/3M/1Y=日K、5Y=週K、MAX=月K。選擇記在 `localStorage`。
+- **盤中更新**：1D／1W 每 60 秒重抓一次（`App.tsx` 的 effect），並同時重抓日 K 給頂欄；分鐘級「準即時」，只在美股盤中（台灣時間 21:30–04:00，冬令 22:30–05:00）有變化。實測最後一根 K 的時間戳 = 當下 ET 時間。
+- **頂欄價格改用獨立的日 K 序列**（`daily` state，不隨區間變），漲跌 = 今日（進行中）收盤 vs 昨收；否則 1D 模式下會變成「vs 前一分鐘」。
+- **`PriceChart.tsx` 重構**：圖只建立一次，資料用 `setData` 更新；只有在「新的 ticker:range 第一批資料」時 `fitContent`，輪詢刷新不重設使用者縮放。盤中 K 棒的時間是 ET 牆鐘時間字串（`YYYY-MM-DDTHH:MM:SS`），把它當 UTC 丟給 Lightweight Charts，軸上就顯示美東市場時間。
+- **踩到的坑**：切換區間時 React 會先用「舊資料 + 新 key」渲染一次，導致圖用舊資料 fit 了新 key、真資料進來不再 fit（1D→5Y 只顯示最後 75 週）。解法是把 bars 和它所屬的 `ticker:range` key 放在**同一個 state**（`series`），並用 `alive` 旗標丟掉過期的 fetch。
+- 驗收：1D／5Y／MAX 都正確填滿；1D 縮放後等 70 秒，價格與最後一根 K 更新、視圖不動。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。
