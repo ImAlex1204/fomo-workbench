@@ -280,6 +280,27 @@
 - **踩到的坑**：切換區間時 React 會先用「舊資料 + 新 key」渲染一次，導致圖用舊資料 fit 了新 key、真資料進來不再 fit（1D→5Y 只顯示最後 75 週）。解法是把 bars 和它所屬的 `ticker:range` key 放在**同一個 state**（`series`），並用 `alive` 旗標丟掉過期的 fetch。
 - 驗收：1D／5Y／MAX 都正確填滿；1D 縮放後等 70 秒，價格與最後一根 K 更新、視圖不動。
 
+## Phase 11：Dashboard「技術面」分頁（三張卡）
+
+任務簡報來源：`phase9-technical-cards.md`（使用者提供，Streamlit 寫法，已翻譯）。**狀態：已於 2026-09-18 完成**。零新依賴（md 說要加 plotly，但 Lightweight Charts 本來就畫蠟燭圖，不需要）。
+
+**指標計算（2026-09-18 決策 A）**：把 UI 已持有的日 K `POST` 給 `openbb-api /api/v1/technical/{sma,stoch,macd,bbands}`（body = bars 陣列），拿回 OpenBB（pandas-ta）算好的欄位——這就是 md 的 `obb.technical`，本機、無外部 API。實際欄位名：`close_SMA_20`／`close_SMA_60`、`STOCHk_14_3_3`／`STOCHd_14_3_3`、`close_MACD_12_26_9`／`close_MACDs_12_26_9`／`close_MACDh_12_26_9`、`close_BBU_20_2.0`／`BBM`／`BBL`。參數：SMA 20/60（md）、KD 14,3,3 與 MACD 12,26,9（OpenBB 預設）、布林 20／2σ（OpenBB 預設是 50，改用慣例）。`api.ts` 的 `fetchTechnical(bars)` 一次發 5 個 POST（SMA 兩個長度），`Technical.tsx` 算一次後三張卡共用。
+
+**共用資料、不重抓（md 原則）**：
+- `App.tsx` 的 `daily` 序列從 1M 改成 **1Y 日 K**（頂欄邏輯不變），技術面分頁直接用它——AI 分頁的 K 線隨區間變（1D 是分鐘 K），不能拿來算 SMA60。
+- `metrics`（P/E／殖利率／Beta）的抓取從 `KeyMetrics.tsx` 提到 `App.tsx`，`KeyMetrics` 改成接 prop；波動區間卡的 Beta 沿用同一份。這是這次唯一改到的 Phase 9 檔案（3 行）。
+
+**卡片**（`ui/src/components/technical/`，共用 `chart.ts` 的 `mountChart()`：深色主題 + ResizeObserver 重 fit）：
+| 卡 | 檔案 | 內容 |
+|---|---|---|
+| K 線走勢 | `CandleSma.tsx` | 蠟燭 + SMA20（橘）/SMA60（紫），成交量在 **Lightweight Charts v5 第二個 pane**（`addSeries(…, 1)` + `setStretchFactor` 3:1），共用時間軸 |
+| 動能指標 | `Momentum.tsx` | 左 KD（K 藍／D 橘，`createPriceLine` 70/30 虛線，`autoscaleInfoProvider` 鎖 0–100）、右 MACD（DIF／Signal 線 + 正綠負紅柱） |
+| 波動區間 | `Volatility.tsx` | 收盤線 + 布林上中下軌（上下虛線），Beta 在標題列右側 |
+
+**yfinance 端點不穩定的第二個案例**：頁面同時打 7–8 個 yfinance 請求時，`equity/profile` 偶爾只回 10 欄（缺 sector／員工數／簡介），單獨呼叫都完整。`api.ts` 加了 `firstResult()`：關鍵欄位缺就等 1.5 秒重抓一次（profile 看 `sector`，metrics 看 `pe_ratio`/`beta`）。
+
+**驗收**：AAPL 三張卡正確（SMA20 322.6 與 API 一致、KD 89/88、MACD 5.34/3.78、布林 340/323/305、Beta 1.08）；基本面與 AI 分頁不受影響；正式版 8001 已確認。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。

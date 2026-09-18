@@ -77,11 +77,18 @@ export type Metrics = { pe_ratio?: number; dividend_yield?: number; beta?: numbe
 export type EpsTrend = { ticker: string; actual: { date: string; eps: number; estimate: number | null }[];
   estimates: { period: string; date: string | null; eps: number; low: number; high: number; analysts: number }[] }
 
-export async function fetchProfile(ticker: string): Promise<Profile> {
-  return (await json<{ results: Profile[] }>(`${OPENBB}/api/v1/equity/profile?symbol=${ticker}&provider=yfinance`)).results[0]
+// yfinance's info-based endpoints (profile, metrics, quote) sometimes come back partial when the page fires
+// several requests at once; if a key field is missing, wait briefly and try once more.
+async function firstResult<T>(url: string, complete: (r: T) => boolean): Promise<T> {
+  let r = (await json<{ results: T[] }>(url)).results[0]
+  if (!complete(r)) { await new Promise(res => setTimeout(res, 1500)); r = (await json<{ results: T[] }>(url)).results[0] }
+  return r
 }
-export async function fetchMetrics(ticker: string): Promise<Metrics> {
-  return (await json<{ results: Metrics[] }>(`${OPENBB}/api/v1/equity/fundamental/metrics?symbol=${ticker}&provider=yfinance`)).results[0]
+export function fetchProfile(ticker: string): Promise<Profile> {
+  return firstResult<Profile>(`${OPENBB}/api/v1/equity/profile?symbol=${ticker}&provider=yfinance`, p => p?.sector != null)
+}
+export function fetchMetrics(ticker: string): Promise<Metrics> {
+  return firstResult<Metrics>(`${OPENBB}/api/v1/equity/fundamental/metrics?symbol=${ticker}&provider=yfinance`, m => m?.pe_ratio != null || m?.beta != null)
 }
 /** Trailing-twelve-month EPS = sum of the last four quarterly diluted EPS (yfinance metrics has no EPS field). */
 export async function fetchEpsTtm(ticker: string): Promise<number | null> {
@@ -92,4 +99,32 @@ export async function fetchEpsTtm(ticker: string): Promise<number | null> {
 }
 export async function fetchEpsTrend(ticker: string): Promise<EpsTrend> {
   return json<EpsTrend>(`${BACKEND}/fundamentals/eps_trend/${ticker}`)
+}
+
+// ---- Technical tab (Phase 11): indicators computed by openbb-api's technical router from bars we already hold ----
+export type Technical = {
+  sma20: { time: string; value: number }[]; sma60: { time: string; value: number }[]
+  k: { time: string; value: number }[]; d: { time: string; value: number }[]
+  macd: { time: string; value: number }[]; signal: { time: string; value: number }[]; hist: { time: string; value: number }[]
+  bbU: { time: string; value: number }[]; bbM: { time: string; value: number }[]; bbL: { time: string; value: number }[]
+}
+type Row = Record<string, number | string | null>
+async function technical(path: string, bars: Bar[], query = ''): Promise<Row[]> {
+  const r = await fetch(`${OPENBB}/api/v1/technical/${path}?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bars) })
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+  return (await r.json()).results
+}
+const col = (rows: Row[], key: string) => rows.filter(r => r[key] != null).map(r => ({ time: String(r.date).slice(0, 10), value: r[key] as number }))
+
+export async function fetchTechnical(bars: Bar[]): Promise<Technical> {
+  const [s20, s60, st, mc, bb] = await Promise.all([
+    technical('sma', bars, 'length=20'), technical('sma', bars, 'length=60'),
+    technical('stoch', bars), technical('macd', bars), technical('bbands', bars, 'length=20&std=2'),
+  ])
+  return {
+    sma20: col(s20, 'close_SMA_20'), sma60: col(s60, 'close_SMA_60'),
+    k: col(st, 'STOCHk_14_3_3'), d: col(st, 'STOCHd_14_3_3'),
+    macd: col(mc, 'close_MACD_12_26_9'), signal: col(mc, 'close_MACDs_12_26_9'), hist: col(mc, 'close_MACDh_12_26_9'),
+    bbU: col(bb, 'close_BBU_20_2.0'), bbM: col(bb, 'close_BBM_20_2.0'), bbL: col(bb, 'close_BBL_20_2.0'),
+  }
 }

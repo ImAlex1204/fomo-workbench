@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react'
-import { fetchEpsTtm, fetchMetrics, type Metrics } from '../../api'
+import { fetchEpsTtm, type Metrics } from '../../api'
 import type { Strings } from '../../i18n'
 
 const f = (v: number | null | undefined, suffix = '', digits = 2) => v == null ? '—' : v.toFixed(digits) + suffix
 
-export default function KeyMetrics({ ticker, s }: { ticker: string; s: Strings }) {
-  const [m, setM] = useState<Metrics | null>(null)
+export default function KeyMetrics({ ticker, m, s }: { ticker: string; m: Metrics | null; s: Strings }) {
   const [eps, setEps] = useState<number | null | undefined>(undefined)
   useEffect(() => {
-    setM(null); setEps(undefined)
-    fetchMetrics(ticker).then(setM).catch(() => setM({}))
+    setEps(undefined)
     fetchEpsTtm(ticker).then(setEps).catch(() => setEps(null))
   }, [ticker])
 

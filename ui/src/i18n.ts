@@ -39,6 +39,13 @@ const en = {
     estimate: 'Estimate',
     analysts: 'analysts',
     noData: 'No data',
+    tabTechnical: 'Technical',
+    candles: 'Candles · SMA 20/60 · Volume',
+    momentum: 'Momentum',
+    kd: 'KD (14,3,3)',
+    macd: 'MACD (12,26,9)',
+    volatility: 'Volatility',
+    bbands: 'Bollinger Bands (20, 2σ)',
 }
 
 export type Strings = { [K in keyof typeof en]: string }
@@ -82,6 +89,13 @@ const zh: Strings = {
     estimate: '預估',
     analysts: '位分析師',
     noData: '無資料',
+    tabTechnical: '技術面',
+    candles: 'K 線 · SMA 20/60 · 成交量',
+    momentum: '動能指標',
+    kd: 'KD (14,3,3)',
+    macd: 'MACD (12,26,9)',
+    volatility: '波動區間',
+    bbands: '布林通道 (20, 2σ)',
 }
 
 export const t = (lang: Lang): Strings => (lang === 'en' ? en : zh)
