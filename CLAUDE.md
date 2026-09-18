@@ -314,6 +314,20 @@
 - 既有檔只改 `App.tsx`（`Tab` 加 `news`、分頁列、一個 `<main>`）與 `api.ts`／`i18n.ts`（型別／字串）。
 - 驗收：AAPL 10 則新聞（GuruFocus、IBD、Yahoo…）與 8 筆 8-K；20 個連結都是 `target=_blank rel=noopener`；正式版 8001 已 build。
 
+## Phase 13：Dashboard「籌碼面」分頁（三張卡）
+
+任務簡報來源：`phase9-ownership-cards.md`（使用者提供，Streamlit 寫法，已翻譯）。**狀態：已於 2026-09-18 完成**。md 預警可能要 FMP 金鑰，實測**三張卡都不用**：
+
+| 卡 | 檔案 | 資料 | 備註 |
+|---|---|---|---|
+| 前五大機構持股 | `ui/src/components/ownership/Holders.tsx` + **`openbb-backend/widgets/institutional.py`** | `GET /ownership/institutional/{ticker}`：yfinance 套件 `institutional_holders`（13F），`holder / shares / value / pct_held / pct_change / date_reported`，比例是小數（0.0797） | openbb-api 的 `ownership/major_holders`、`ownership/institutional` **只有 fmp provider**（要金鑰），所以走 eps_trend 那種例外（2026-09-18 決策 A）。改 backend 後已在 ODP Desktop 重啟 |
+| 內部人交易 | `Insiders.tsx` | openbb-api `ownership/insider_trading?provider=sec`（SEC Form 4 官方，免費）；欄位 `transaction_date / owner_name / owner_title / acquisition_or_disposition / transaction_type（SEC 長文字）/ securities_transacted / transaction_price / filing_url` | 顯示 取得／處分 + 短標籤（公開市場買進／賣出、RSU 歸屬／選擇權執行、繳稅扣股、其他；由 SEC `transaction_type` 前綴對映，原文在 tooltip）；`sec` provider 不理 `limit`，UI 端切 10 筆；`$0` 價格不顯示 |
+| 放空與暗池 | `ShortsDarkPool.tsx` | 放空比率／回補天數：`ownership/share_statistics?provider=yfinance`（`short_percent_of_float` 是小數、`days_to_cover`、`date`）。暗池：`darkpool/otc?provider=finra`（FINRA ATS 週資料，只有分子 `share_quantity`） | **暗池佔比 = 最新一週 ATS 股數 ÷ 該週日 K 成交量加總**（用 App 共用的 1Y 日 K，零額外 API）；FINRA 資料延遲約兩週，tile 下方標示週別。三格 tile 樣式同基本面關鍵指標卡 |
+
+- 不能用的：`shorts/fails_to_deliver`（SEC 的 dcm.sec.gov 連不上）、`shorts/short_volume`（stockgrid 回空）、FINRA `shorts/short_interest`（可用但回 2021 至今整段、很慢，不需要）。
+- 既有檔只改 `App.tsx`（`Tab` 加 `ownership`、分頁列、`<main>`）、`api.ts`／`i18n.ts`、`openbb-backend/main.py`（一行掛載）。
+- 驗收：AAPL 五大機構（BlackRock 7.97% ▲+1.60% …，截至 2026-06-30）、10 筆 Form 4、放空 0.96%／回補 2.97 天／暗池 13.2%（週別 2026-09-14）；KO／MSFT 端點 200；正式版 8001 已 build。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。

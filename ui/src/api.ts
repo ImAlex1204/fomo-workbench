@@ -140,3 +140,24 @@ export async function fetchNews(ticker: string): Promise<NewsItem[]> {
 export async function fetchFilings(ticker: string): Promise<Filing[]> {
   return (await json<{ results: Filing[] }>(`${OPENBB}/api/v1/equity/fundamental/filings?symbol=${ticker}&provider=sec&form_type=8-K&limit=10`)).results
 }
+
+// ---- Ownership tab (Phase 13) ----
+export type Holder = { holder: string; shares: number; value: number | null; pct_held: number | null; pct_change: number | null; date_reported: string }
+export type InsiderTx = { transaction_date?: string; filing_date: string; owner_name?: string; owner_title?: string; acquisition_or_disposition?: string;
+  transaction_type?: string; securities_transacted?: number; transaction_price?: number; filing_url?: string }
+export type ShareStats = { date?: string; short_interest?: number; short_percent_of_float?: number; days_to_cover?: number; institution_ownership?: number; insider_ownership?: number }
+export type OtcWeek = { update_date: string; share_quantity: number; trade_quantity: number }
+
+export async function fetchHolders(ticker: string): Promise<Holder[]> {
+  return json<Holder[]>(`${BACKEND}/ownership/institutional/${ticker}`)
+}
+export async function fetchInsiders(ticker: string): Promise<InsiderTx[]> {
+  // the sec provider returns whole filings regardless of `limit`, so cap client-side
+  return (await json<{ results: InsiderTx[] }>(`${OPENBB}/api/v1/equity/ownership/insider_trading?symbol=${ticker}&provider=sec&limit=10`)).results.slice(0, 10)
+}
+export function fetchShareStats(ticker: string): Promise<ShareStats> {
+  return firstResult<ShareStats>(`${OPENBB}/api/v1/equity/ownership/share_statistics?symbol=${ticker}&provider=yfinance`, r => r?.days_to_cover != null)
+}
+export async function fetchOtc(ticker: string): Promise<OtcWeek[]> {
+  return (await json<{ results: OtcWeek[] }>(`${OPENBB}/api/v1/equity/darkpool/otc?symbol=${ticker}&provider=finra`)).results
+}

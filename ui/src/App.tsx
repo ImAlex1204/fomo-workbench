@@ -9,8 +9,9 @@ import TopBar from './components/TopBar'
 import Fundamentals from './components/fundamentals/Fundamentals'
 import Technical from './components/technical/Technical'
 import News from './components/news/News'
+import Ownership from './components/ownership/Ownership'
 
-type Tab = 'ai' | 'fundamentals' | 'technical' | 'news'
+type Tab = 'ai' | 'fundamentals' | 'technical' | 'news' | 'ownership'
 
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('lang') as Lang) || 'en')
@@ -58,7 +59,7 @@ export default function App() {
     <div className="flex min-h-full flex-col lg:h-full">
       <TopBar ticker={ticker} quote={quote} bars={daily} lang={lang} s={s} online={online} onTicker={setTicker} onLang={setLang} />
       <nav className="flex gap-1 px-5 pb-3">
-        {([['ai', s.tabAi], ['fundamentals', s.tabFundamentals], ['technical', s.tabTechnical], ['news', s.tabNews]] as [Tab, string][]).map(([id, label]) => (
+        {([['ai', s.tabAi], ['fundamentals', s.tabFundamentals], ['technical', s.tabTechnical], ['news', s.tabNews], ['ownership', s.tabOwnership]] as [Tab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === id ? 'bg-panel-2 text-ink border border-line' : 'text-ink-3 hover:text-ink-2'}`}>{label}</button>
         ))}
@@ -67,6 +68,7 @@ export default function App() {
       <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${tab === 'fundamentals' ? '' : 'hidden'}`}><Fundamentals ticker={ticker} metrics={metrics} s={s} /></main>
       <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${tab === 'technical' ? '' : 'hidden'}`}><Technical bars={daily} metrics={metrics} s={s} /></main>
       <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${tab === 'news' ? '' : 'hidden'}`}><News ticker={ticker} s={s} /></main>
+      <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${tab === 'ownership' ? '' : 'hidden'}`}><Ownership ticker={ticker} bars={daily} s={s} /></main>
       <main className={`grid grid-cols-1 gap-4 px-5 pb-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)] lg:grid-rows-[minmax(0,1fr)] ${tab === 'ai' ? '' : 'hidden'}`}>
         <section className="panel flex h-[460px] min-h-0 flex-col p-4 lg:h-auto">
           <div className="mb-2 flex items-center justify-between">
