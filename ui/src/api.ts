@@ -161,3 +161,17 @@ export function fetchShareStats(ticker: string): Promise<ShareStats> {
 export async function fetchOtc(ticker: string): Promise<OtcWeek[]> {
   return (await json<{ results: OtcWeek[] }>(`${OPENBB}/api/v1/equity/darkpool/otc?symbol=${ticker}&provider=finra`)).results
 }
+
+// ---- Financials tab (Phase 14): 5 fiscal years, yfinance ----
+export type Statement = Record<string, number | string | null> & { period_ending: string }
+export const STATEMENT_KEYS = {
+  income: ['total_revenue', 'gross_profit', 'operating_income', 'net_income'],
+  balance: ['total_assets', 'total_liabilities_net_minority_interest', 'total_equity_non_controlling_interests', 'total_current_assets', 'current_liabilities'],
+  cash: ['operating_cash_flow', 'investing_cash_flow', 'financing_cash_flow', 'capital_expenditure'],
+} as const
+export async function fetchStatement(kind: keyof typeof STATEMENT_KEYS, ticker: string): Promise<Statement[]> {
+  const d = await json<{ results: Statement[] }>(`${OPENBB}/api/v1/equity/fundamental/${kind}?symbol=${ticker}&provider=yfinance&period=annual&limit=5`)
+  // yfinance pads to 5 rows but the oldest year usually lacks the headline items; keep years that have at least one of the fields we chart
+  return d.results.filter(r => STATEMENT_KEYS[kind].some(k => typeof r[k] === 'number'))
+    .sort((a, b) => a.period_ending.localeCompare(b.period_ending))  // oldest -> newest
+}

@@ -328,6 +328,23 @@
 - 既有檔只改 `App.tsx`（`Tab` 加 `ownership`、分頁列、`<main>`）、`api.ts`／`i18n.ts`、`openbb-backend/main.py`（一行掛載）。
 - 驗收：AAPL 五大機構（BlackRock 7.97% ▲+1.60% …，截至 2026-06-30）、10 筆 Form 4、放空 0.96%／回補 2.97 天／暗池 13.2%（週別 2026-09-14）；KO／MSFT 端點 200；正式版 8001 已 build。
 
+## Phase 14：Dashboard「財務報表」分頁（三張卡）— 五大面向完成
+
+任務簡報來源：`phase9-financials-cards.md`（使用者提供，Streamlit 寫法，已翻譯）。**狀態：已於 2026-09-18 完成**。分頁列定案：**AI 綜合分析 · 基本面 · 技術面 · 消息面 · 籌碼面 · 財務報表**（`App.tsx` 的 `Tab` 型別六個值）。零新依賴、免金鑰。
+
+**資料**：`equity/fundamental/{income,balance,cash}?provider=yfinance&period=annual&limit=5`。**yfinance 實際只給 4 個完整會計年度**——第 5 列（最舊）主要欄位是 null，`fetchStatement` 依各報表要畫的欄位（`STATEMENT_KEYS`）過濾掉全空年份，並依 `period_ending` 由舊到新排序；年份標籤 `FY` + 年（AAPL 會計年度 9/30 結束）。
+
+| 卡 | 檔案 | 欄位 | 備註 |
+|---|---|---|---|
+| 損益表 | `ui/src/components/financials/IncomeCard.tsx` | `total_revenue`、`gross_profit`、`operating_income`、`net_income` | 每年一組四條 |
+| 資產負債表 | `BalanceCard.tsx` | `total_assets`、`total_liabilities_net_minority_interest`、`total_equity_non_controlling_interests`（三檔驗過欄位名一致） | Lightweight Charts 三條線；**流動比率**自算 = 最新一期 `total_current_assets` ÷ `current_liabilities`（AAPL 0.89），**銀行股兩欄是 null → 顯示「—」**（JPM 驗過） |
+| 現金流量表 | `CashFlowCard.tsx` | `operating_cash_flow`、`investing_cash_flow`、`financing_cash_flow` 長條（零線為基準）+ **自由現金流**疊線 | FCF 自算 = OCF + `capital_expenditure`（**yfinance 的資本支出是負數**），結果與 yfinance 自己的 `free_cash_flow` 完全一致（AAPL 98,767M） |
+
+**分組長條圖用純 SVG 自畫**（`BarChart.tsx`，2026-09-18 決策 A）：Lightweight Charts 是時間序列庫、畫不出「同一年份一組多條」；SVG 元件約 70 行，含零線、1/2/5 進位的整數刻度、hover 提示（年份 · 項目 · 金額）、可疊一條線。沒有引入 Recharts。
+
+- 既有檔只改 `App.tsx`、`api.ts`、`i18n.ts`。
+- 驗收：AAPL 四年損益分組長條、資產負債三線 + 流動比率 0.89、現金流三色長條 + FCF 線；JPM 流動比率「—」；hover 提示正確；正式版 8001 已 build。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。
