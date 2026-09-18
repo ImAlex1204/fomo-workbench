@@ -175,3 +175,30 @@ export async function fetchStatement(kind: keyof typeof STATEMENT_KEYS, ticker: 
   return d.results.filter(r => STATEMENT_KEYS[kind].some(k => typeof r[k] === 'number'))
     .sort((a, b) => a.period_ending.localeCompare(b.period_ending))  // oldest -> newest
 }
+
+// ---- Live quotes (Phase 10B): backend relays Yahoo's streamer as SSE ----
+export type Tick = { price: number; time: string; change?: number; change_percent?: number; market_hours?: number; day_volume?: number }
+
+/** Subscribe to real-time ticks; returns an unsubscribe function. EventSource reconnects on its own if the stream drops. */
+export function subscribeLive(ticker: string, onTick: (t: Tick) => void): () => void {
+  const es = new EventSource(`${BACKEND}/live/${ticker}`)
+  es.onmessage = e => onTick(JSON.parse(e.data))
+  return () => es.close()
+}
+
+/** Fold a tick into the last bar (or open a new minute bar for intraday series). Returns a new array. */
+export function applyTick(bars: Bar[], intraday: boolean, tick: Tick): Bar[] {
+  if (bars.length === 0) return bars
+  const last = bars[bars.length - 1]
+  if (intraday) {
+    // ET wall-clock string, minute precision, like the bars from openbb-api
+    const d = new Date(Number(tick.time))
+    const et = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d)
+    const g = (t: string) => et.find(x => x.type === t)!.value
+    const minute = `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:00`
+    if (minute > last.date) return [...bars, { date: minute, open: tick.price, high: tick.price, low: tick.price, close: tick.price, volume: 0 }]
+    if (minute < last.date) return bars  // late tick for an earlier minute; the 60s poll will reconcile
+  }
+  const updated = { ...last, close: tick.price, high: Math.max(last.high, tick.price), low: Math.min(last.low, tick.price) }
+  return [...bars.slice(0, -1), updated]
+}

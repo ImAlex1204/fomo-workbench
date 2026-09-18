@@ -280,6 +280,15 @@
 - **踩到的坑**：切換區間時 React 會先用「舊資料 + 新 key」渲染一次，導致圖用舊資料 fit 了新 key、真資料進來不再 fit（1D→5Y 只顯示最後 75 週）。解法是把 bars 和它所屬的 `ticker:range` key 放在**同一個 state**（`series`），並用 `alive` 旗標丟掉過期的 fetch。
 - 驗收：1D／5Y／MAX 都正確填滿；1D 縮放後等 70 秒，價格與最後一根 K 更新、視圖不動。
 
+## Phase 10B：秒級即時報價（Yahoo 串流 → SSE）
+
+**狀態：已於 2026-09-18 完成（盤後驗證；正規盤的 K 棒即時更新邏輯已寫好但尚未在盤中實看）**。使用者問「是否要付費 API」→ 答：不用，先走免費的 yfinance `WebSocket`（Yahoo 串流，非官方協定），壞掉再換免費官方 WebSocket（Alpaca IEX／Finnhub／Tiingo 免費層，要金鑰）。
+
+- **Backend** `openbb-backend/widgets/live_quote.py`：`GET /live/{ticker}` 回 SSE；每個連線各開一個 `yf.AsyncWebSocket` 訂閱該檔，tick 轉成 `data: {price, time(ms), change, change_percent, market_hours, day_volume?}`，15 秒沒資料送 `: keep-alive` 註解；客戶端斷線就關 WS。跟 eps_trend／institutional 同類的「不經 openbb-api」例外（openbb-api 沒有串流）。`market_hours`：0 盤前、1 正規盤、2 盤後、3 延長。
+- **UI**：`api.ts` 的 `subscribeLive()`（`EventSource`，斷線自動重連）與 `applyTick()`（把 tick 折進最後一根 K：更新 close/high/low；分鐘 K 遇到新的一分鐘就補一根 volume 0 的新棒，60 秒輪詢仍保留當成交量與校正來源）。`App.tsx` 每次換 ticker／區間重新訂閱；**只有 `market_hours === 1` 才折進 K 棒**（圖表維持正規盤資料），盤前／盤後 tick 只更新頂欄。`TopBar` 有 tick 時優先顯示 tick 價格與 Yahoo 的 `change_percent`（相對前一正規收盤，盤前／盤後也正確），並顯示 LIVE（綠、脈動）／PRE／POST 標籤。
+- **實測特性**：Yahoo 訂閱後**約 20 秒才送第一筆**（standalone 腳本也一樣，不是我們的延遲），之後盤後每 2–10 秒一筆；瀏覽器 `EventSource` 30 秒收到 3 筆 NVDA。盤後頂欄正確顯示 335.26 −0.26% 盤後。
+- 改 backend 後已在 ODP Desktop 重啟。若 Yahoo 改協定，`EventSource` 會一直重連失敗但不影響其他功能，UI 仍靠 60 秒輪詢。
+
 ## Phase 11：Dashboard「技術面」分頁（三張卡）
 
 任務簡報來源：`phase9-technical-cards.md`（使用者提供，Streamlit 寫法，已翻譯）。**狀態：已於 2026-09-18 完成**。零新依賴（md 說要加 plotly，但 Lightweight Charts 本來就畫蠟燭圖，不需要）。

@@ -91,6 +91,9 @@ const en = {
     cff: 'Financing',
     fcf: 'Free Cash Flow',
     fiscalYears: 'fiscal years · yfinance via openbb-api',
+    live: 'LIVE',
+    pre: 'PRE',
+    post: 'POST',
 }
 
 export type Strings = { [K in keyof typeof en]: string }
@@ -186,6 +189,9 @@ const zh: Strings = {
     cff: '融資活動',
     fcf: '自由現金流',
     fiscalYears: '個會計年度 · yfinance（經 openbb-api）',
+    live: '即時',
+    pre: '盤前',
+    post: '盤後',
 }
 
 export const t = (lang: Lang): Strings => (lang === 'en' ? en : zh)

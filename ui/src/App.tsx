@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AGENT, BACKEND, OPENBB, RANGES, fetchHistory, fetchMetrics, fetchQuote, fetchSignals, type Bar, type Metrics, type Quote, type Range, type Signal } from './api'
+import { AGENT, BACKEND, OPENBB, RANGES, applyTick, fetchHistory, fetchMetrics, fetchQuote, fetchSignals, subscribeLive, type Bar, type Metrics, type Quote, type Range, type Signal, type Tick } from './api'
 import { t, type Lang } from './i18n'
 import AgentChat from './components/AgentChat'
 import FinrlSignals from './components/FinrlSignals'
@@ -20,6 +20,7 @@ export default function App() {
   const [series, setSeries] = useState<{ key: string; bars: Bar[] }>({ key: '', bars: [] })  // chart data + the ticker:range it belongs to (kept together so a stale render can't pair old bars with a new key)
   const [daily, setDaily] = useState<Bar[]>([])     // 1Y daily series: top-bar price/change + Technical tab (shared, fetched once)
   const [metrics, setMetrics] = useState<Metrics | null>(null)  // shared by KeyMetrics (P/E…) and Volatility (Beta)
+  const [tick, setTick] = useState<Tick | null>(null)  // latest real-time trade from the backend's Yahoo relay
   const [range, setRange] = useState<Range>(() => (localStorage.getItem('range') as Range) || '1Y')
   const [quote, setQuote] = useState<Quote | null>(null)
   const [signals, setSignals] = useState<Signal[] | null>(null)
@@ -51,6 +52,17 @@ export default function App() {
     return () => { alive = false; if (id) clearInterval(id) }
   }, [ticker, range])
 
+  useEffect(() => {  // real-time ticks: move the last bar of both series and the top-bar price between polls
+    setTick(null)
+    const intraday = !!RANGES[range].intraday
+    return subscribeLive(ticker, t => {
+      setTick(t)
+      if (t.market_hours !== 1) return  // pre/post-market trades show in the top bar only; bars stay regular-session
+      setSeries(prev => prev.key === `${ticker}:${range}` ? { ...prev, bars: applyTick(prev.bars, intraday, t) } : prev)
+      setDaily(prev => applyTick(prev, false, t))
+    })
+  }, [ticker, range])
+
   useEffect(() => {
     const probe = (u: string) => fetch(u, { method: 'GET' }).then(r => r.ok || r.status === 405).catch(() => false)
     Promise.all([probe(`${OPENBB}/`), probe(`${BACKEND}/widgets.json`), probe(`${AGENT}/docs`)]).then(r => setOnline(r.filter(Boolean).length))
@@ -58,7 +70,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-full flex-col lg:h-full">
-      <TopBar ticker={ticker} quote={quote} bars={daily} lang={lang} s={s} online={online} onTicker={setTicker} onLang={setLang} />
+      <TopBar ticker={ticker} quote={quote} bars={daily} tick={tick} lang={lang} s={s} online={online} onTicker={setTicker} onLang={setLang} />
       <nav className="flex gap-1 px-5 pb-3">
         {([['ai', s.tabAi], ['fundamentals', s.tabFundamentals], ['technical', s.tabTechnical], ['news', s.tabNews], ['ownership', s.tabOwnership], ['financials', s.tabFinancials]] as [Tab, string][]).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
