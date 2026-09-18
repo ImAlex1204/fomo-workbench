@@ -128,3 +128,15 @@ export async function fetchTechnical(bars: Bar[]): Promise<Technical> {
     bbU: col(bb, 'close_BBU_20_2.0'), bbM: col(bb, 'close_BBM_20_2.0'), bbL: col(bb, 'close_BBL_20_2.0'),
   }
 }
+
+// ---- News tab (Phase 12): raw facts only. NewsItem deliberately omits summary/text (copyright rule: title + link only). ----
+export type NewsItem = { date: string; title: string; url: string; source?: string }
+export type Filing = { filing_date: string; report_date?: string; primary_doc_description?: string; items?: string; report_url?: string; filing_detail_url?: string }
+
+export async function fetchNews(ticker: string): Promise<NewsItem[]> {
+  const d = await json<{ results: NewsItem[] }>(`${OPENBB}/api/v1/news/company?symbol=${ticker}&provider=yfinance&limit=10`)
+  return d.results.map(({ date, title, url, source }) => ({ date, title, url, source })).sort((a, b) => b.date.localeCompare(a.date))
+}
+export async function fetchFilings(ticker: string): Promise<Filing[]> {
+  return (await json<{ results: Filing[] }>(`${OPENBB}/api/v1/equity/fundamental/filings?symbol=${ticker}&provider=sec&form_type=8-K&limit=10`)).results
+}

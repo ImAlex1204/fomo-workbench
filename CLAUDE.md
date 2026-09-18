@@ -301,6 +301,19 @@
 
 **驗收**：AAPL 三張卡正確（SMA20 322.6 與 API 一致、KD 89/88、MACD 5.34/3.78、布林 340/323/305、Beta 1.08）；基本面與 AI 分頁不受影響；正式版 8001 已確認。
 
+## Phase 12：Dashboard「消息面」分頁（兩張卡）
+
+任務簡報來源：`phase9-news-cards.md`（使用者提供，Streamlit 寫法，已翻譯）。**狀態：已於 2026-09-18 完成**。零新依賴、免金鑰。
+
+| 卡 | 檔案 | 資料（都經 openbb-api） | 顯示 |
+|---|---|---|---|
+| 個股新聞 | `ui/src/components/news/NewsList.tsx` | `news/company?provider=yfinance&limit=10`；欄位 `date`(UTC)、`title`、`url`、`source`（另有 `summary`/`text`，**依版權原則不顯示**，`NewsItem` 型別乾脆不宣告） | 每則一列：本地時間 `MM/DD HH:mm` + 標題 + 來源，整列開新分頁；yfinance 回來的順序不是時間序，UI 依 `date` 由新到舊排 |
+| 8-K 重大訊息 | `Filings.tsx` | `equity/fundamental/filings?provider=sec&form_type=8-K&limit=10`（SEC EDGAR 官方，免費）；欄位 `filing_date`、`primary_doc_description`（8-K／8-K/A）、`items`（"2.02,9.01"）、`report_url` | 每筆 `[申報日] 8-K · Items 代碼…`，連到 EDGAR 原文件；item 代碼滑鼠移上去顯示 **SEC 官方 item 名稱**（`ITEMS` 靜態表 14 條，2026-09-18 決策 A1：是官方分類名稱、不是判讀，不違反分工原則） |
+
+- 分工原則落實：這個分頁只有事實（標題／日期／連結），沒有情緒標籤或摘要；解讀留在 AI 分頁（FinGPT 用的也是同一個 yfinance 新聞端點，資料一致）。
+- 既有檔只改 `App.tsx`（`Tab` 加 `news`、分頁列、一個 `<main>`）與 `api.ts`／`i18n.ts`（型別／字串）。
+- 驗收：AAPL 10 則新聞（GuruFocus、IBD、Yahoo…）與 8 筆 8-K；20 個連結都是 `target=_blank rel=noopener`；正式版 8001 已 build。
+
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 
 - **新增能力 = 新增檔案，不是修改既有檔案**。想加新的資料源，就在 `openbb-backend/widgets/` 加一個新檔案；想加新的 agent 工具，就在 `agent/tools/` 加一個新檔案；想在 dashboard 加新的顯示區塊，就在 `ui/src/components/` 加一個新的元件檔。不要為了加新功能去動已經跑通的舊檔案。

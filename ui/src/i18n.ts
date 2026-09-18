@@ -46,6 +46,12 @@ const en = {
     macd: 'MACD (12,26,9)',
     volatility: 'Volatility',
     bbands: 'Bollinger Bands (20, 2σ)',
+    tabNews: 'News',
+    news: 'Company News',
+    newsSource: 'openbb-api / yfinance · titles and links only',
+    filings: '8-K Filings',
+    filingsSource: 'SEC EDGAR via openbb-api',
+    items: 'Items',
 }
 
 export type Strings = { [K in keyof typeof en]: string }
@@ -96,6 +102,12 @@ const zh: Strings = {
     macd: 'MACD (12,26,9)',
     volatility: '波動區間',
     bbands: '布林通道 (20, 2σ)',
+    tabNews: '消息面',
+    news: '個股新聞',
+    newsSource: 'openbb-api / yfinance · 僅標題與連結',
+    filings: '8-K 重大訊息申報',
+    filingsSource: 'SEC EDGAR（經 openbb-api）',
+    items: '項目',
 }
 
 export const t = (lang: Lang): Strings => (lang === 'en' ? en : zh)
