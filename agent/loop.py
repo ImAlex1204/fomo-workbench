@@ -86,7 +86,8 @@ class Agent:
             try:
                 return await self.client.aio.models.generate_content(model=self.model, contents=contents, config=self.config)
             except Exception as e:
-                if wait is None or not any(code in str(e) for code in ("429", "503")):
+                # a daily-quota 429 ("...PerDay...FreeTier") will not clear by waiting; only retry the transient ones
+                if wait is None or not any(code in str(e) for code in ("429", "503")) or "PerDay" in str(e):
                     raise
                 await asyncio.sleep(wait)
 

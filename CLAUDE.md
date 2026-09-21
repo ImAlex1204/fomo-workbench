@@ -102,7 +102,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 輸出格式 `[Positive Developments]:` / `[Potential Concerns]:` / `[Prediction & Analysis]`，`Prediction: Up/Down by X-Y%` 一行可用正則抓。
 
 **Agent（`agent/loop.py`）**
-- 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試。
+- 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試；但**每日配額**的 429（訊息含 `PerDay`）直接放棄不重試。**`gemini-3.6-flash` 免費層每天只有 20 次 generate**：簡報固定 1 次、每個聊天問題 2–3 次，測試時很容易在下午就用完（2026-09-21 實際發生），用完後聊天完全不能用直到太平洋時間午夜重置；換模型用 `agent/.env` 的 `GEMINI_MODEL`。
 - SSE 事件：`tool_call` / `tool_stream`（FinGPT 生成中的 token，2026-09-21 加）/ `tool_result`（preview 300 字）/ `text` / `error`。FinGPT 串流用 `TextIteratorStreamer`，`forecast(ticker, on_token=None)` 的回呼在 worker thread 被呼叫，`loop.py` 用 `call_soon_threadsafe` + `asyncio.Queue` 轉回事件迴圈；**`torch.no_grad()` 是 thread-local，必須在生成執行緒內進入**。
 
 **每日簡報（`agent/brief.py`，2026-09-21）**
