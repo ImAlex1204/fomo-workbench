@@ -13,7 +13,7 @@ Built as a pre-MSc FinTech portfolio project.
 
 ![Market overview](docs/market-overview.png)
 
-![AAPL — chart, FinRL signals and a FinGPT answer on one screen](docs/stock-ai.png)
+![AAPL — chart, FinRL signals, and the agent comparing FinRL's five agents with FinGPT's outlook](docs/stock-ai.png)
 
 ## What it shows
 

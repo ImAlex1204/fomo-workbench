@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { chat, type ChatEvent } from '../api'
 import type { Strings } from '../i18n'
 
@@ -38,8 +39,12 @@ export default function AgentChat({ ticker, s }: { ticker: string; s: Strings })
     <div className="panel flex h-[520px] shrink-0 flex-col p-4 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold tracking-wide text-ink-2 uppercase">{s.chat}</h2>
-        <button className="text-xs text-accent hover:underline" disabled={busy}
-          onClick={() => send(`What does FinGPT say about ${ticker} this week?`)}>FinGPT → {ticker}</button>
+        <div className="flex gap-3">
+          <button className="text-xs text-accent hover:underline" disabled={busy}
+            onClick={() => send(`What does FinGPT say about ${ticker} this week?`)}>FinGPT → {ticker}</button>
+          <button className="text-xs text-accent hover:underline" disabled={busy}
+            onClick={() => send(`Compare ${ticker}: do the five FinRL agents' signals agree with FinGPT's outlook for this week?`)}>FinRL × FinGPT → {ticker}</button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-sm">
         {msgs.length === 0 && <p className="text-ink-3">{s.chatHint}</p>}
@@ -53,7 +58,7 @@ export default function AgentChat({ ticker, s }: { ticker: string; s: Strings })
             {m.pending && !m.text && <span className="animate-pulse text-ink-3">{s.thinking}</span>}
             {m.text && (
               <div className={`inline-block max-w-full rounded-lg px-3 py-2 text-left ${m.role === 'user' ? 'whitespace-pre-wrap bg-accent/15 text-ink' : 'md bg-panel-2 text-ink'}`}>
-                {m.role === 'user' ? m.text : <Markdown>{m.text}</Markdown>}
+                {m.role === 'user' ? m.text : <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>}
               </div>
             )}
           </div>

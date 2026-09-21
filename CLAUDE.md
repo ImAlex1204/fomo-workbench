@@ -108,6 +108,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 六個分頁與市場總覽都**保持掛載、用 `hidden` 切換**（不是條件渲染），聊天紀錄與圖才不會消失；個股面板在第一次開啟某檔後才掛載（`stockOpened`）。
 - Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，每張圖都有 `ResizeObserver → fitContent()`。切換區間時 bars 與它所屬的 `ticker:range` key 要放在**同一個 state**，並用 `alive` 旗標丟掉過期 fetch。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。
+- 聊天面板有兩顆快捷鈕：「FinGPT → 代號」與「FinRL × FinGPT → 代號」（後者送出比較問題，讓模型同時呼叫兩個工具並指出分歧）。回答用 `react-markdown` + `remark-gfm` 渲染（模型比較五個 agent 時會出表格，沒有 gfm 會變成一串 `|`）。
 - 版權：新聞只顯示標題／日期／來源／連結，`NewsItem` 型別刻意不宣告 `summary`／`text`。
 - 分組長條圖（財務報表）是自畫 SVG（`BarChart.tsx`），Lightweight Charts 畫不出同一年份一組多條；沒有引 Recharts。
 - RRG（`market/rrg.ts`）是公開近似算法，不是 JdK 原版；球體大小 = 成交金額 ÷ 20 日平均（盤中改用前一日），卡片下方已註明不是資金流。
