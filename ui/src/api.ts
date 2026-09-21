@@ -5,7 +5,8 @@ export const AGENT = 'http://127.0.0.1:8010'
 
 export type Bar = { date: string; open: number; high: number; low: number; close: number; volume: number }
 export type Quote = { name?: string }  // other yfinance quote fields are unreliable; price comes from bars
-export type Signal = { ticker: string; as_of: string; close: number; agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number }
+export type Signal = { ticker: string; as_of: string; close: number; agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number;
+  equity: number[]; return_pct: number }  // equity = the agent's simulated DOW 30 portfolio value over the last 60 sessions (same for every ticker)
 export type ChatEvent =
   | { type: 'tool_call'; name: string; args: Record<string, unknown> }
   | { type: 'tool_result'; name: string; preview: string }

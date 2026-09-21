@@ -29,7 +29,7 @@ MODELS = {name: cls.load(MODEL_DIR / f"agent_{name}") for name, cls in
           [("a2c", A2C), ("ddpg", DDPG), ("ppo", PPO), ("td3", TD3), ("sac", SAC)]}
 
 router = APIRouter()
-_cache: dict = {}  # {as_of: {"window": df, "agents": {name: {"trade": {tic: shares}, "position": {tic: shares}}}}}
+_cache: dict = {}  # {as_of: {"window": df, "agents": {name: {"trade": {tic: shares}, "position": {tic: shares}, "equity": [...]}}}}
 
 
 def fetch_prices(symbols, start):
@@ -92,7 +92,10 @@ def run_agents(window):
         if env.turbulence >= env.turbulence_threshold:  # env.step's risk override
             trade = np.full(n, -env.hmax)
         position = np.array(env.state[1 + n:1 + 2 * n]).astype(int)
-        out[name] = {"trade": dict(zip(tics, trade.tolist())), "position": dict(zip(tics, position.tolist()))}
+        # env.asset_memory: total assets after each simulated day (initial cash first, today's close last).
+        # Portfolio-level (all 30 stocks), so it is the same curve for every ticker of that agent.
+        out[name] = {"trade": dict(zip(tics, trade.tolist())), "position": dict(zip(tics, position.tolist())),
+                     "equity": [round(float(v)) for v in env.asset_memory]}
     return out
 
 
@@ -118,5 +121,6 @@ def finrl_signal(ticker: str = "AAPL"):
         shares = a["trade"][ticker]
         rows.append({"ticker": ticker, "as_of": last["date"], "close": round(float(last["close"]), 2),
                      "agent": agent, "action": "BUY" if shares > 0 else "SELL" if shares < 0 else "HOLD",
-                     "shares": shares, "position": a["position"][ticker]})
+                     "shares": shares, "position": a["position"][ticker],
+                     "equity": a["equity"], "return_pct": round((a["equity"][-1] / a["equity"][0] - 1) * 100, 2)})
     return rows

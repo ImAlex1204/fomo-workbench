@@ -93,6 +93,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 五個模型是**對 DOW 30 一起決策**的（action_space=30），端點只是取出該 ticker 那一欄；非 DOW 30 回 404。
 - 資料要用 `adjustment=splits_and_dividends`（與訓練資料一致），跟 K 線圖的未還原價只有最新一天相同。
 - `shares` = 模型今天的**原始意圖**（`predict × hmax`，未被現金／持股裁切），`position` = 從現金起算模擬 `EPISODE_DAYS=60` 天後的持股。agent 幾乎都在 episode 開頭建倉後長抱，所以單看「今天的 action」多半是 0；改 `EPISODE_DAYS` 會改變訊號。沒有呼叫上游 `DRL_prediction`（跑完 VecEnv 會 reset、持倉消失），自己寫了 8 行迴圈。
+- 每列另有 `equity`（該 agent 60 天模擬的**整體 30 檔組合**總資產，60 個點，同一 agent 每檔相同）與 `return_pct`；UI 的「60 日模擬」欄畫成 sparkline，用來判斷五個 agent 近期誰比較可信（2026-09-21 加）。
 - 每個交易日第一次呼叫約 4 秒，之後快取 6 ms。
 
 **FinGPT（`agent/tools/fingpt_tool.py`）**
