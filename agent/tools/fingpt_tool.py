@@ -6,7 +6,9 @@ and market cap / shares are expressed in millions like Finnhub reports them.
 Data (profile, weekly prices, news, metrics) comes from the local openbb-api, never from Finnhub.
 """
 import re
-from datetime import date, timedelta
+import threading
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import requests
 import torch
@@ -14,6 +16,8 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 OPENBB_API = "http://127.0.0.1:6900/api/v1"
+ET = ZoneInfo("America/New_York")
+MARKET_CLOSE = time(16, 0)
 BASE_MODEL = "NousResearch/Llama-2-7b-chat-hf"
 LORA_MODEL = "FinGPT/fingpt-forecaster_dow30_llama2-7b_lora"
 N_WEEKS = 2  # past weeks of price moves + news in the prompt (upstream default 3)
@@ -29,12 +33,21 @@ SYSTEM_PROMPT = "You are a seasoned stock market analyst. Your task is to list t
 # --- end upstream ---
 
 _model = _tokenizer = None
+_lock = threading.Lock()  # one load/generate at a time: concurrent runs fight for MPS (and would load the 13GB model twice)
 
 
 def _get(path, **params):
     r = requests.get(f"{OPENBB_API}/{path}", params={"provider": "yfinance", **params}, timeout=60)
     r.raise_for_status()
     return r.json()["results"]
+
+
+def last_complete_session():
+    """Same rule as openbb-backend/widgets/finrl_signal.py (separate venv, hence duplicated): the
+    latest ET date whose daily bar is final. yfinance returns today's in-progress bar during the
+    session, which would otherwise become the latest week's end price."""
+    now = datetime.now(ET)
+    return now.date() if now.time() >= MARKET_CLOSE else now.date() - timedelta(days=1)
 
 
 def _load():
@@ -59,7 +72,8 @@ def _weekly_blocks(ticker, today):
     """[(start, end, start_price, end_price, [news_str])] for the past N_WEEKS, like upstream get_stock_data + get_news."""
     steps = [today - timedelta(days=7 * n) for n in range(N_WEEKS, -1, -1)]
     prices = _get("equity/price/historical", symbol=ticker, start_date=(steps[0] - timedelta(days=5)).isoformat())
-    closes = {row["date"]: row["close"] for row in prices}
+    cutoff = last_complete_session().isoformat()  # drop today's in-progress bar during the session
+    closes = {row["date"]: row["close"] for row in prices if row["date"] <= cutoff}
     dates = sorted(closes)
     bounds = []
     for step in steps[:-1]:  # first trading day on/after each boundary
@@ -68,8 +82,11 @@ def _weekly_blocks(ticker, today):
 
     news = _get("news/company", symbol=ticker, limit=NEWS_PER_WEEK * N_WEEKS)
     blocks = []
-    for start, end in zip(bounds[:-1], bounds[1:]):
-        items = [n for n in news if start <= n["date"][:10] <= end][:NEWS_PER_WEEK]
+    for i, (start, end) in enumerate(zip(bounds[:-1], bounds[1:])):
+        # news windows are calendar weeks ending at `today` (upstream get_news), independent of the price
+        # cutoff: during the session today's headlines count even though the last complete bar is yesterday's
+        lo, hi = steps[i].isoformat(), steps[i + 1].isoformat()
+        items = [n for n in news if lo <= n["date"][:10] <= hi][:NEWS_PER_WEEK]
         blocks.append((start, end, closes[start], closes[end],
                        ["[Headline]: {}\n[Summary]: {}\n".format(n["title"], n.get("summary") or n.get("text") or "") for n in items]))
     return blocks
@@ -100,12 +117,13 @@ def build_prompt(ticker, today):
 def forecast(ticker: str) -> dict:
     """Run FinGPT-Forecaster for one ticker using OpenBB data. Takes ~1 minute on Apple Silicon."""
     ticker = ticker.upper()
-    today = date.today()
+    today = datetime.now(ET).date()
     prompt, blocks = build_prompt(ticker, today)
-    model, tokenizer = _load()
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=500, do_sample=True, eos_token_id=tokenizer.eos_token_id, use_cache=True)
+    with _lock:
+        model, tokenizer = _load()
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(**inputs, max_new_tokens=500, do_sample=True, eos_token_id=tokenizer.eos_token_id, use_cache=True)
     answer = re.sub(r".*\[/INST\]\s*", "", tokenizer.decode(out[0], skip_special_tokens=True), flags=re.DOTALL)
     m = re.search(r"Prediction:\s*(.+)", answer)
     return {

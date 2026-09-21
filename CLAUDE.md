@@ -147,7 +147,7 @@
 - 資料流：`openbb-api` → DOW 30 還原權息 OHLCV（`adjustment=splits_and_dividends`，對應 FinRL 訓練資料）+ `^VIX` → 上游 `FeatureEngineer`（`use_vix=False`，VIX 改由 openbb-api 提供，其餘同 script 1）→ 最近 60 個交易日的 `StockTradingEnv`（`env_kwargs` 同 script 3）→ 5 個模型。
 - **訊號語意（重要）**：agent 幾乎都在 episode 開頭建倉、之後長抱，所以「今天的 action」單獨看幾乎都是 0。端點因此回傳兩個欄位：`shares` = 模型今天的**原始意圖**（`model.predict` × hmax，未被現金/持股裁切；例如 `SELL -100` 但 `position 0` 表示看空但無股可賣），`position` = 模擬組合裡目前持股。這跟上游 `DRL_prediction` 回傳的 `df_actions`（已執行股數）不同，所以自己寫了 8 行 env 迴圈而不是呼叫 `DRL_prediction`（後者跑完 VecEnv 會自動 reset，持倉會消失）。`EPISODE_DAYS=60` 是設計參數，改它會改變訊號。
 - 回傳格式：list of 5 rows，每列 `{ticker, as_of, close, agent, action(BUY/SELL/HOLD), shares, position}`；同時支援 `/finrl/signal/{ticker}` 與 `/finrl/signal?ticker=`（後者給 `widgets.json` 用）。非 DOW 30 回 404。
-- 效能：每天第一次呼叫約 4 秒（抓資料 + 特徵 + 5 個 agent 各 60 步），之後同日快取，6 ms。
+- 效能：每天第一次呼叫約 4 秒（抓資料 + 特徵 + 5 個 agent 各 60 步），之後同日快取，6 ms。**2026-09-21 修正**：快取 key 與資料截止改用「最後一個已收盤的交易日」（ET 16:00 前 = 前一日），因為盤中 yfinance 會回傳當天未完成的日 K，原本會拿半根 K 算指標並快取一整天（實測 PPO 股數因此不同）。
 - `widgets.json` 照 OpenBB 規格寫了，但**沒有 Workspace 可驗證**。
 
 ## Phase 5：把 FinGPT 洞見包裝成 Agent 工具（簡單路線）
@@ -173,7 +173,7 @@
 **狀態：已於 2026-09-17 完成**。LLM 供應商 = **Google Gemini**（免費額度；`gemini-2.5-flash` 對新用戶已下架，預設改 `gemini-3.6-flash`，可用 `GEMINI_MODEL` 覆蓋）。金鑰在 `agent/.env`（`GEMINI_API_KEY=`，已 gitignore，由使用者自行放入）。
 - 跑在 `envs/fingpt`（加裝 google-genai、mcp、fastapi、uvicorn、python-dotenv；lockfile 已更新）。啟動順序：`openbb-api`(6900) → `openbb-mcp`(8005，`--allowed-categories equity,news,index`) → `cd agent && ../envs/fingpt/bin/uvicorn main:app --port 8010`。三者都在 `.claude/launch.json`。
 - 給 Gemini 的工具只有 6 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`，呼叫時固定注入 `yfinance`，避免 LLM 選到付費供應商）+ 本機 `fingpt_forecast(ticker)`。
-- `fingpt_forecast` 自己從 `openbb-api` 抓 profile／2 週價格／新聞／基本面組 prompt（格式照上游 `app.py` `get_all_prompts_online`），Gemini 不經手新聞內容。限制：yfinance 新聞只有最新 ~10 則、無日期範圍，所以通常只有最近一週有新聞。單次約 60–90 秒。
+- `fingpt_forecast` 自己從 `openbb-api` 抓 profile／2 週價格／新聞／基本面組 prompt（格式照上游 `app.py` `get_all_prompts_online`），Gemini 不經手新聞內容。限制：yfinance 新聞只有最新 ~10 則、無日期範圍，所以通常只有最近一週有新聞。單次約 60–90 秒。 **2026-09-21 修正**：(a) 價格序列改以「最後一個已收盤的交易日」截止（同 Phase 4 的修正），新聞窗口則照上游用日曆週到今天為止——兩者要分開，否則盤中查詢時當天的新聞（yfinance 常常 10 則全是當天）會整批被切掉；(b) 加了 `threading.Lock` 包住載模型＋生成，同時兩個請求不再搶 MPS（也避免首次呼叫同時載兩份 13GB 模型）。
 - 端點：`POST /chat {"message"}` → SSE，事件 `tool_call` / `tool_result`（preview 300 字）/ `text`（最終回答）/ `error`。無狀態、無對話記憶（垂直切片不需要）。
 - 驗收：「幫我看一下 AAPL 最近的新聞，FinGPT 怎麼說？」→ Gemini 依序呼叫 `news_company`、`fingpt_forecast`，1 分 46 秒回傳繁中摘要 + FinGPT 三段式報告並標注資料來源工具。
 

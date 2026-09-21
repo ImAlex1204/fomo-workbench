@@ -3,8 +3,9 @@
 Data comes from the local openbb-api (adjusted OHLCV + ^VIX), then goes through the same
 FeatureEngineer / StockTradingEnv setup as FinRL/examples/FinRL_StockTrading_2026_{1,3}*.py.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,8 @@ OPENBB_API = "http://127.0.0.1:6900/api/v1"
 MODEL_DIR = Path(__file__).resolve().parents[2] / "finrl-work" / "trained_models"
 HISTORY_DAYS = 400  # calendar days; turbulence needs >252 trading days of history
 EPISODE_DAYS = 60  # trading days the agent simulates (starting from cash) before deciding today
+ET = ZoneInfo("America/New_York")
+MARKET_CLOSE = time(16, 0)
 
 MODELS = {name: cls.load(MODEL_DIR / f"agent_{name}") for name, cls in
           [("a2c", A2C), ("ddpg", DDPG), ("ppo", PPO), ("td3", TD3), ("sac", SAC)]}
@@ -37,9 +40,18 @@ def fetch_prices(symbols, start):
     return pd.DataFrame(r.json()["results"])
 
 
-def build_window():
-    start = (date.today() - timedelta(days=HISTORY_DAYS)).isoformat()
+def last_complete_session():
+    """Latest ET date whose daily bar is final: today after the close, otherwise yesterday.
+    During the session yfinance already returns an in-progress bar for today; the agents were
+    trained on complete bars, so that bar (and the VIX one) must not feed the indicators."""
+    now = datetime.now(ET)
+    return now.date() if now.time() >= MARKET_CLOSE else now.date() - timedelta(days=1)
+
+
+def build_window(as_of: date):
+    start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
     df = fetch_prices(DOW_30_TICKER, start).rename(columns={"symbol": "tic"})
+    df = df[df["date"] <= as_of.isoformat()]
     df["day"] = pd.to_datetime(df["date"]).dt.dayofweek
     df = df[["date", "open", "high", "low", "close", "volume", "tic", "day"]]
     # use_vix=False: FeatureEngineer.add_vix would call yfinance directly; we take ^VIX from openbb-api instead
@@ -85,12 +97,12 @@ def run_agents(window):
 
 
 def signals_for_today():
-    today = date.today().isoformat()
-    if today not in _cache:
+    as_of = last_complete_session()
+    if as_of not in _cache:
         _cache.clear()
-        window = build_window()
-        _cache[today] = {"window": window, "agents": run_agents(window)}
-    return _cache[today]
+        window = build_window(as_of)
+        _cache[as_of] = {"window": window, "agents": run_agents(window)}
+    return _cache[as_of]
 
 
 @router.get("/finrl/signal/{ticker}")
