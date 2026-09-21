@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import requests
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 OPENBB_API = "http://127.0.0.1:6900/api/v1"
 ET = ZoneInfo("America/New_York")
@@ -114,7 +114,7 @@ def build_prompt(ticker, today):
     return B_INST + B_SYS + SYSTEM_PROMPT + E_SYS + body + E_INST, blocks
 
 
-def forecast(ticker: str) -> dict:
+def forecast(ticker: str, on_token=None) -> dict:
     """Run FinGPT-Forecaster for one ticker using OpenBB data. Takes ~1 minute on Apple Silicon."""
     ticker = ticker.upper()
     today = datetime.now(ET).date()
@@ -122,9 +122,23 @@ def forecast(ticker: str) -> dict:
     with _lock:
         model, tokenizer = _load()
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-        with torch.no_grad():
-            out = model.generate(**inputs, max_new_tokens=500, do_sample=True, eos_token_id=tokenizer.eos_token_id, use_cache=True)
-    answer = re.sub(r".*\[/INST\]\s*", "", tokenizer.decode(out[0], skip_special_tokens=True), flags=re.DOTALL)
+        # Generate in a helper thread and read the streamer here, so callers (the chat loop) can
+        # relay tokens to the UI while the ~1 minute generation runs. Only new tokens are streamed.
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+        def generate():  # torch.no_grad is thread-local, so it must be entered in the generating thread
+            with torch.no_grad():
+                model.generate(**inputs, max_new_tokens=500, do_sample=True, eos_token_id=tokenizer.eos_token_id, use_cache=True, streamer=streamer)
+
+        gen = threading.Thread(target=generate, daemon=True)
+        gen.start()
+        chunks = []
+        for text in streamer:
+            chunks.append(text)
+            if on_token:
+                on_token(text)
+        gen.join()
+    answer = "".join(chunks)
     m = re.search(r"Prediction:\s*(.+)", answer)
     return {
         "ticker": ticker, "as_of": today.isoformat(),

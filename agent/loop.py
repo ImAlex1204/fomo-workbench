@@ -57,6 +57,20 @@ class Agent:
             system_instruction=SYSTEM, tools=[types.Tool(function_declarations=decls)],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
 
+    async def _stream_fingpt(self, args):
+        """Run fingpt_forecast in a thread, yielding ("token", text) as it generates, then ("result", dict)."""
+        q: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        task = asyncio.create_task(asyncio.to_thread(fingpt_tool.forecast, **args, on_token=lambda t: loop.call_soon_threadsafe(q.put_nowait, t)))
+        while not task.done():
+            try:
+                yield "token", await asyncio.wait_for(q.get(), 0.5)
+            except asyncio.TimeoutError:
+                pass
+        while not q.empty():
+            yield "token", q.get_nowait()
+        yield "result", task.result()
+
     async def call_tool(self, name, args):
         if name == "fingpt_forecast":
             return await asyncio.to_thread(fingpt_tool.forecast, **args)
@@ -77,7 +91,7 @@ class Agent:
                 await asyncio.sleep(wait)
 
     async def run(self, message):
-        """Yield events: tool_call, tool_result, text (final answer), error."""
+        """Yield events: tool_call, tool_stream (FinGPT tokens), tool_result, text (final answer), error."""
         contents = [types.Content(role="user", parts=[types.Part(text=message)])]
         for _ in range(MAX_ROUNDS):
             resp = await self._generate(contents)
@@ -90,7 +104,14 @@ class Agent:
                 args = dict(fc.args or {})
                 yield {"type": "tool_call", "name": fc.name, "args": args}
                 try:
-                    result = await self.call_tool(fc.name, args)
+                    if fc.name == "fingpt_forecast":  # streamed so the UI can show the report as it is written
+                        async for kind, val in self._stream_fingpt(args):
+                            if kind == "token":
+                                yield {"type": "tool_stream", "name": fc.name, "text": val}
+                            else:
+                                result = val
+                    else:
+                        result = await self.call_tool(fc.name, args)
                 except Exception as e:  # tool failure goes back to the model, not to the user
                     result = {"error": str(e)}
                 yield {"type": "tool_result", "name": fc.name, "preview": json.dumps(result, ensure_ascii=False)[:300]}

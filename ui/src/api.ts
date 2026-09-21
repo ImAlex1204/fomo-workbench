@@ -9,6 +9,7 @@ export type Signal = { ticker: string; as_of: string; close: number; agent: stri
   equity: number[]; return_pct: number }  // equity = the agent's simulated DOW 30 portfolio value over the last 60 sessions (same for every ticker)
 export type ChatEvent =
   | { type: 'tool_call'; name: string; args: Record<string, unknown> }
+  | { type: 'tool_stream'; name: string; text: string }  // FinGPT tokens while fingpt_forecast runs
   | { type: 'tool_result'; name: string; preview: string }
   | { type: 'text'; text: string }
   | { type: 'error'; text: string }

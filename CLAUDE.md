@@ -103,7 +103,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 
 **Agent（`agent/loop.py`）**
 - 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試。
-- SSE 事件：`tool_call` / `tool_result`（preview 300 字）/ `text` / `error`。
+- SSE 事件：`tool_call` / `tool_stream`（FinGPT 生成中的 token，2026-09-21 加）/ `tool_result`（preview 300 字）/ `text` / `error`。FinGPT 串流用 `TextIteratorStreamer`，`forecast(ticker, on_token=None)` 的回呼在 worker thread 被呼叫，`loop.py` 用 `call_soon_threadsafe` + `asyncio.Queue` 轉回事件迴圈；**`torch.no_grad()` 是 thread-local，必須在生成執行緒內進入**。
 
 **每日簡報（`agent/brief.py`，2026-09-21）**
 - 排程規則只有一條：每分鐘檢查，`last_complete_session()` 是平日且該日期沒有**完成的**簡報（檔案不存在或 `generated_at` 為 null）就跑。這同時涵蓋收盤後自動跑（ET 16:00 key 切到今天）與機器關機後的補跑；**agent 一啟動如果當天還沒跑就會立刻開始**（8 檔約 12 分鐘，與聊天共用 `_lock`，聊天的 FinGPT 呼叫會排在當前那檔之後）。

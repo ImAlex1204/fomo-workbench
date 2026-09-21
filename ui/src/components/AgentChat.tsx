@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { chat, type ChatEvent } from '../api'
 import type { Strings } from '../i18n'
 
-type Msg = { role: 'user' | 'agent'; text: string; steps: string[]; pending?: boolean }
+type Msg = { role: 'user' | 'agent'; text: string; steps: string[]; stream?: string; pending?: boolean }  // stream = FinGPT's report as it is generated
 
 export default function AgentChat({ ticker, s }: { ticker: string; s: Strings }) {
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -24,6 +24,7 @@ export default function AgentChat({ ticker, s }: { ticker: string; s: Strings })
       for await (const ev of chat(text)) {
         const e = ev as ChatEvent
         if (e.type === 'tool_call') patch(a => ({ ...a, steps: [...a.steps, `${s.calling} ${e.name}(${JSON.stringify(e.args)})`] }))
+        else if (e.type === 'tool_stream') patch(a => ({ ...a, stream: (a.stream ?? '') + e.text }))
         else if (e.type === 'text') patch(a => ({ ...a, text: e.text, pending: false }))
         else if (e.type === 'error') patch(a => ({ ...a, text: `${s.error}: ${e.text}`, pending: false }))
       }
@@ -55,7 +56,10 @@ export default function AgentChat({ ticker, s }: { ticker: string; s: Strings })
                 {m.steps.map((st, j) => <li key={j} className="truncate" title={st}>› {st}</li>)}
               </ul>
             )}
-            {m.pending && !m.text && <span className="animate-pulse text-ink-3">{s.thinking}</span>}
+            {m.stream && (m.text
+              ? <details className="mb-1 text-xs text-ink-3"><summary className="cursor-pointer select-none">{s.rawOutput}</summary><pre className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg bg-bg p-2 font-mono text-[11px] text-ink-2">{m.stream}</pre></details>
+              : <pre className="mb-1 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg bg-bg p-2 font-mono text-[11px] text-ink-2">{m.stream}<span className="animate-pulse">▍</span></pre>)}
+            {m.pending && !m.text && !m.stream && <span className="animate-pulse text-ink-3">{s.thinking}</span>}
             {m.text && (
               <div className={`inline-block max-w-full rounded-lg px-3 py-2 text-left ${m.role === 'user' ? 'whitespace-pre-wrap bg-accent/15 text-ink' : 'md bg-panel-2 text-ink'}`}>
                 {m.role === 'user' ? m.text : <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>}
