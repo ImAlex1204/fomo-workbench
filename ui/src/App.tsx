@@ -79,7 +79,7 @@ export default function App() {
   return (
     <div className="flex min-h-full flex-col lg:h-full">
       <TopBar ticker={ticker} quote={quote} bars={daily} tick={tick} lang={lang} s={s} online={online} view={view} onTicker={openStock} onHome={() => setView('market')} onLang={setLang} />
-      <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${view === 'market' ? '' : 'hidden'}`}><Market s={s} onSelect={openStock} /></main>
+      <main className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 ${view === 'market' ? '' : 'hidden'}`}><Market lang={lang} s={s} onSelect={openStock} /></main>
       {stockOpened && (<>
       <nav className={`flex gap-1 px-5 pb-3 ${view === 'stock' ? '' : 'hidden'}`}>
         {([['ai', s.tabAi], ['fundamentals', s.tabFundamentals], ['technical', s.tabTechnical], ['news', s.tabNews], ['ownership', s.tabOwnership], ['financials', s.tabFinancials]] as [Tab, string][]).map(([id, label]) => (

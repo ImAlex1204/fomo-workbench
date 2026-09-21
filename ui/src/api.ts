@@ -261,3 +261,27 @@ export async function fetchSectorEtfs(): Promise<EtfBar[]> {
   const d = await json<{ results: EtfBar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${syms}&provider=yfinance&start_date=${since}&interval=1d`)
   return d.results.map(({ symbol, date, close, volume }) => ({ symbol, date, close, volume }))
 }
+
+// ---- Daily brief (agent/brief.py): FinRL + FinGPT over the watchlist after each close, Gemini overview ----
+export type BriefSignal = { agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number }
+export type BriefItem = {
+  ticker: string
+  finrl: { as_of?: string; close?: number; signals?: BriefSignal[]; error?: string } | null
+  fingpt: { prediction: string | null; analysis: string } | null
+  error: string | null
+}
+export type Brief = { as_of: string; generated_at: string | null; tickers: string[]; items: BriefItem[];
+  summary: Record<'en' | 'zh', { overview: string; tickers: Record<string, string> }> | null }
+export type BriefStatus = { running: boolean; progress: [number, number] | null; brief: Brief | null }
+
+export const fetchBrief = () => json<BriefStatus>(`${AGENT}/brief`)
+export const fetchWatchlist = () => json<string[]>(`${AGENT}/watchlist`)
+export async function saveWatchlist(tickers: string[]): Promise<string[]> {
+  const r = await fetch(`${AGENT}/watchlist`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tickers }) })
+  if (!r.ok) throw new Error(`${r.status}`)
+  return r.json()
+}
+export async function runBrief(): Promise<void> {
+  const r = await fetch(`${AGENT}/brief/run`, { method: 'POST' })
+  if (!r.ok) throw new Error(`${r.status}`)
+}

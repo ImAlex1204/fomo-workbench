@@ -21,6 +21,10 @@ Built as a pre-MSc FinTech portfolio project.
 sector/market cap/daily change, sector rotation bars, an RRG-style sector bubble map
 (SPDR sector ETFs vs SPY), and top gainers/losers/most active. Click any tile to open a stock.
 
+**Daily brief (top of the landing page)** — after each US close the agent runs FinRL and FinGPT
+over a watchlist you edit in place, then Gemini writes a short overview of where the two engines
+agree and conflict. Stored locally as one JSON per session; catches up on start if the Mac was off.
+
 **Per-stock view, six tabs** —
 
 | Tab | Content |
@@ -76,7 +80,7 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
 - **Insight layer — FinGPT-Forecaster.** The upstream prompt format fed with OpenBB profile,
   prices, news and fundamentals; returns `[Positive Developments] / [Potential Concerns] /
   [Prediction & Analysis]`. Runs locally in fp16 on the Mac's GPU (~6 tok/s).
-- **Agent.** ~150 lines, no framework: Gemini function-calling over five `openbb-mcp` tools
+- **Agent.** ~150 lines of loop plus the daily-brief scheduler, no framework: Gemini function-calling over five `openbb-mcp` tools
   plus `fingpt_forecast` and `finrl_signal`, streamed to the UI as SSE — so one question can
   cite both engines and point out where they disagree. The only cloud dependency in the project.
 - **UI.** One component per card; tabs stay mounted so charts and chat survive switching.
@@ -164,7 +168,7 @@ cd openbb-backend && ../envs/finrl/bin/python -m pytest   # imports the trained 
 
 ```
 openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; serves ui/dist; tests/
-agent/            FastAPI + Gemini loop; tools/fingpt_tool.py wraps FinGPT-Forecaster; tests/
+agent/            FastAPI + Gemini loop; brief.py (daily brief + scheduler); tools/{fingpt,finrl}_tool.py; tests/
 ui/               React + Vite + Tailwind; src/components/{market,fundamentals,technical,news,ownership,financials}; *.test.ts beside the code
 requirements/     pip freeze of each venv (openbb / finrl / fingpt)
 fingpt-smoke/     standalone FinGPT inference check used before wiring the agent

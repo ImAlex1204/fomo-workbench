@@ -66,7 +66,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
-- `agent/main.py`（SSE 端點）、`loop.py`（Gemini 迴圈）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`（gitignore）
+- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
 
@@ -104,10 +104,17 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試。
 - SSE 事件：`tool_call` / `tool_result`（preview 300 字）/ `text` / `error`。
 
+**每日簡報（`agent/brief.py`，2026-09-21）**
+- 排程規則只有一條：每分鐘檢查，`last_complete_session()` 是平日且該日期沒有**完成的**簡報（檔案不存在或 `generated_at` 為 null）就跑。這同時涵蓋收盤後自動跑（ET 16:00 key 切到今天）與機器關機後的補跑；**agent 一啟動如果當天還沒跑就會立刻開始**（8 檔約 12 分鐘，與聊天共用 `_lock`，聊天的 FinGPT 呼叫會排在當前那檔之後）。
+- 每檔 FinRL（秒）+ FinGPT（1.5 分）逐檔存檔（進度給 UI），跑完**一次** Gemini 呼叫（`response_mime_type=application/json`）產生 EN／繁中的 overview + 每檔一句；Gemini 失敗時 `summary` 為 null，引擎輸出仍在。
+- 測試時**不要**讓臨時 agent 寫到 `agent/briefs/`（正式排程會以為當天做完）；把 `brief.BRIEF_DIR`／`WATCHLIST_FILE` 指到 scratchpad，並把 `brief.scheduler` 換成空迴圈（做法見 git log 的 brief commit）。
+- 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
+
 **UI**
 - 六個分頁與市場總覽都**保持掛載、用 `hidden` 切換**（不是條件渲染），聊天紀錄與圖才不會消失；個股面板在第一次開啟某檔後才掛載（`stockOpened`）。
 - Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，每張圖都有 `ResizeObserver → fitContent()`。切換區間時 bars 與它所屬的 `ticker:range` key 要放在**同一個 state**，並用 `alive` 旗標丟掉過期 fetch。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。
+- 首頁第一張卡是每日簡報（`market/DailyBrief.tsx`），每 30 秒輪詢 `/brief`，watchlist 增刪直接 `PUT /watchlist`；`Market` 多接一個 `lang` prop 以選摘要語言。
 - 聊天面板有兩顆快捷鈕：「FinGPT → 代號」與「FinRL × FinGPT → 代號」（後者送出比較問題，讓模型同時呼叫兩個工具並指出分歧）。回答用 `react-markdown` + `remark-gfm` 渲染（模型比較五個 agent 時會出表格，沒有 gfm 會變成一串 `|`）。
 - 版權：新聞只顯示標題／日期／來源／連結，`NewsItem` 型別刻意不宣告 `summary`／`text`。
 - 分組長條圖（財務報表）是自畫 SVG（`BarChart.tsx`），Lightweight Charts 畫不出同一年份一組多條；沒有引 Recharts。

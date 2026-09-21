@@ -9,3 +9,5 @@ ui/dist/
 *.dmg
 *.log
 .pytest_cache/
+agent/watchlist.json
+agent/briefs/
