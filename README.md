@@ -147,12 +147,24 @@ envs/fingpt/bin/uvicorn main:app --port 8010 --app-dir agent
 Open <http://localhost:8001>. For UI development, `cd ui && npm run dev` serves on :5173 against
 the same backends. `.claude/launch.json` holds the same commands for Claude Code sessions.
 
+## Tests
+
+The glue layer's pure logic has unit tests (no services or network needed): tick folding into
+bars, the squarified treemap, the RRG approximation, the FINRA reporting-week mapping, the Gemini
+schema conversion and the last-complete-session rule.
+
+```bash
+cd ui && npx vitest run
+cd agent && ../envs/fingpt/bin/python -m pytest
+cd openbb-backend && ../envs/finrl/bin/python -m pytest   # imports the trained agents from finrl-work/
+```
+
 ## Repository layout
 
 ```
-openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; serves ui/dist
-agent/            FastAPI + Gemini loop; tools/fingpt_tool.py wraps FinGPT-Forecaster
-ui/               React + Vite + Tailwind; src/components/{market,fundamentals,technical,news,ownership,financials}
+openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; serves ui/dist; tests/
+agent/            FastAPI + Gemini loop; tools/fingpt_tool.py wraps FinGPT-Forecaster; tests/
+ui/               React + Vite + Tailwind; src/components/{market,fundamentals,technical,news,ownership,financials}; *.test.ts beside the code
 requirements/     pip freeze of each venv (openbb / finrl / fingpt)
 fingpt-smoke/     standalone FinGPT inference check used before wiring the agent
 CLAUDE.md         project brief and phase-by-phase engineering log (繁體中文)

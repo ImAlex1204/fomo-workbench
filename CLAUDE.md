@@ -62,6 +62,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 改 `openbb-backend/` 或 `agent/` → 在 ODP Desktop 把該服務 **Stop → Start**（沒有 auto-reload）。agent 重啟後第一次 FinGPT 呼叫多 8 秒載模型。
 - 改 `ui/` → `cd ui && npm run build`（8001 直接 serve 新的 `ui/dist`）。開發時 `npm run dev`（5173）打同一組後端。
 - 改了 venv 的套件 → `uv pip freeze` 更新 `requirements/<env>.lock.txt`（安裝時用 `--no-deps`，見 README）。
+- **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了 `applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`_gemini_schema`／`last_complete_session` 要跑；純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
 
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）

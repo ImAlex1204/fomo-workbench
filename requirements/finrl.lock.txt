@@ -52,6 +52,7 @@ highspy==1.15.1
 httptools==0.8.0
 idna==3.20
 ijson==3.5.1
+iniconfig==2.3.0
 ipython==9.8.0
 ipython-pygments-lexers==1.1.1
 jedi==0.20.0
@@ -95,6 +96,7 @@ peewee==3.17.3
 pexpect==4.9.0
 pillow==12.3.0
 platformdirs==4.11.9
+pluggy==1.6.0
 ply==3.11
 prometheus-client==0.26.0
 prompt-toolkit==3.0.53
@@ -121,6 +123,7 @@ pymysql==1.2.3
 pyparsing==3.3.2
 pyportfolioopt==1.6.0
 pysocks==1.7.1
+pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-discovery==1.6.0
 python-dotenv==1.2.3
