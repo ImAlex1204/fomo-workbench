@@ -246,3 +246,18 @@ export async function fetchMovers(kind: 'gainers' | 'losers' | 'active'): Promis
   const d = await json<{ results: Mover[] }>(`${OPENBB}/api/v1/equity/discovery/${kind}?provider=yfinance&limit=10`)
   return d.results.map(m => ({ ...m, percent_change: m.percent_change * 100 }))
 }
+
+// ---- Sector RRG (Phase 16): SPDR sector ETFs vs SPY, 3 years daily, one batched request ----
+export const SECTOR_ETFS: { symbol: string; name: string }[] = [
+  { symbol: 'XLK', name: 'Technology' }, { symbol: 'XLF', name: 'Financial' }, { symbol: 'XLE', name: 'Energy' },
+  { symbol: 'XLV', name: 'Healthcare' }, { symbol: 'XLY', name: 'Consumer Cyclical' }, { symbol: 'XLP', name: 'Consumer Defensive' },
+  { symbol: 'XLI', name: 'Industrials' }, { symbol: 'XLB', name: 'Basic Materials' }, { symbol: 'XLU', name: 'Utilities' },
+  { symbol: 'XLRE', name: 'Real Estate' }, { symbol: 'XLC', name: 'Communication Services' },
+]
+export type EtfBar = { symbol: string; date: string; close: number; volume: number }
+export async function fetchSectorEtfs(): Promise<EtfBar[]> {
+  const syms = ['SPY', ...SECTOR_ETFS.map(e => e.symbol)].join(',')
+  const since = new Date(Date.now() - 3 * 366 * 86400e3).toISOString().slice(0, 10)
+  const d = await json<{ results: EtfBar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${syms}&provider=yfinance&start_date=${since}&interval=1d`)
+  return d.results.map(({ symbol, date, close, volume }) => ({ symbol, date, close, volume }))
+}

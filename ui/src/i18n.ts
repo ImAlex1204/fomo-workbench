@@ -105,6 +105,18 @@ const en = {
     losers: 'Top Losers',
     active: 'Most Active',
     backToMarket: 'Market',
+    rrg: 'Sector Rotation Map',
+    rrgNote: 'RRG-style approximation: x = strength vs SPY (100 = in line), y = momentum of that strength. Bubble = today\u2019s dollar volume ÷ 20-day average (activity proxy, not fund flow). Tail = recent path, arrow = now. SPDR sector ETFs via openbb-api.',
+    leading: 'Leading',
+    weakening: 'Weakening',
+    lagging: 'Lagging',
+    improving: 'Improving',
+    horizonD: 'Daily',
+    horizonW: 'Weekly',
+    horizonQ: 'Quarterly',
+    rsRatio: 'RS-Ratio',
+    rsMom: 'RS-Momentum',
+    volX: 'Vol ×20d',
 }
 
 export type Strings = { [K in keyof typeof en]: string }
@@ -214,6 +226,18 @@ const zh: Strings = {
     losers: '跌幅排行',
     active: '成交量排行',
     backToMarket: '市場總覽',
+    rrg: '板塊輪動圖',
+    rrgNote: 'RRG 風格近似算法：橫軸 = 相對 SPY 的強度（100 = 同步），縱軸 = 強度的動能。球體 = 當日成交金額 ÷ 20 日平均（活動熱度代理，非資金流）。尾巴 = 近期軌跡，箭頭 = 現在。資料：SPDR 板塊 ETF（經 openbb-api）。',
+    leading: '領先',
+    weakening: '轉弱',
+    lagging: '落後',
+    improving: '改善',
+    horizonD: '日',
+    horizonW: '週',
+    horizonQ: '季',
+    rsRatio: '相對強度',
+    rsMom: '相對動能',
+    volX: '量 ÷20日',
 }
 
 export const t = (lang: Lang): Strings => (lang === 'en' ? en : zh)

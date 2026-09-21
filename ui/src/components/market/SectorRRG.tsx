@@ -1,0 +1,85 @@
+import { useEffect, useMemo, useState } from 'react'
+import { SECTOR_ETFS, fetchSectorEtfs, type EtfBar } from '../../api'
+import type { Strings } from '../../i18n'
+import { computeRrg, type Horizon, type RrgSector } from './rrg'
+
+const W = 720, H = 520, PAD = 36
+const QUAD = { leading: '#26a69a', weakening: '#f5b166', lagging: '#ef5350', improving: '#4f8cff' }
+const quadrant = (x: number, y: number) => x >= 100 ? (y >= 100 ? 'leading' : 'weakening') : (y >= 100 ? 'improving' : 'lagging')
+
+export default function SectorRRG({ s }: { s: Strings }) {
+  const [bars, setBars] = useState<EtfBar[] | null>(null)
+  const [err, setErr] = useState(false)
+  const [h, setH] = useState<Horizon>('D')
+  const [hover, setHover] = useState<RrgSector | null>(null)
+  useEffect(() => {
+    const load = () => fetchSectorEtfs().then(b => { setBars(b); setErr(false) }).catch(() => setErr(true))
+    load(); const id = setInterval(load, 300_000); return () => clearInterval(id)
+  }, [])
+  const sectors = useMemo(() => (bars ? computeRrg(bars, SECTOR_ETFS, h) : []), [bars, h])
+
+  // symmetric scale around 100 so the quadrant cross stays centred; margin so bubbles don't clip
+  // scale from where bubbles are now (plus the last few tail points); older tail segments may run off-plot and are clipped
+  const span = Math.max(1.5, ...sectors.flatMap(sec => sec.tail.slice(-3).flatMap(p => [Math.abs(p.x - 100), Math.abs(p.y - 100)]))) * 1.3
+  const sx = (x: number) => PAD + ((x - (100 - span)) / (2 * span)) * (W - 2 * PAD)
+  const sy = (y: number) => H - PAD - ((y - (100 - span)) / (2 * span)) * (H - 2 * PAD)
+  const radius = (v: number) => 12 * Math.sqrt(Math.min(3, Math.max(0.4, v)))
+
+  return (
+    <section className="panel flex flex-col p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold tracking-wide text-ink-2 uppercase">{s.rrg}</h2>
+        <div className="flex gap-0.5 rounded-md border border-line p-0.5">
+          {(['D', 'W', 'Q'] as Horizon[]).map(k => <button key={k} onClick={() => setH(k)} className={`rounded px-2 py-0.5 text-[11px] ${h === k ? 'bg-panel-2 text-ink' : 'text-ink-3 hover:text-ink-2'}`}>{k === 'D' ? s.horizonD : k === 'W' ? s.horizonW : s.horizonQ}</button>)}
+        </div>
+      </div>
+      {err ? <p className="text-sm text-ink-3">{s.noData}</p> : !bars ? <p className="text-sm text-ink-3">…</p> : (
+        <div className="relative">
+          <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" onMouseLeave={() => setHover(null)}>
+            <defs><clipPath id="rrg-clip"><rect x={PAD} y={PAD} width={W - 2 * PAD} height={H - 2 * PAD} /></clipPath><marker id="rrg-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="context-stroke" strokeWidth={1.5} strokeLinecap="round" /></marker></defs>
+            {/* quadrants */}
+            <rect x={sx(100)} y={PAD} width={W - PAD - sx(100)} height={sy(100) - PAD} fill={QUAD.leading} opacity={0.06} />
+            <rect x={sx(100)} y={sy(100)} width={W - PAD - sx(100)} height={H - PAD - sy(100)} fill={QUAD.weakening} opacity={0.06} />
+            <rect x={PAD} y={sy(100)} width={sx(100) - PAD} height={H - PAD - sy(100)} fill={QUAD.lagging} opacity={0.06} />
+            <rect x={PAD} y={PAD} width={sx(100) - PAD} height={sy(100) - PAD} fill={QUAD.improving} opacity={0.06} />
+            <line x1={sx(100)} x2={sx(100)} y1={PAD} y2={H - PAD} stroke="#3a4356" strokeDasharray="4 3" />
+            <line x1={PAD} x2={W - PAD} y1={sy(100)} y2={sy(100)} stroke="#3a4356" strokeDasharray="4 3" />
+            {([['leading', W - PAD - 6, PAD + 14, 'end'], ['weakening', W - PAD - 6, H - PAD - 6, 'end'], ['lagging', PAD + 6, H - PAD - 6, 'start'], ['improving', PAD + 6, PAD + 14, 'start']] as const).map(([q, x, y, anchor]) => (
+              <text key={q} x={x} y={y} textAnchor={anchor} fontSize="11" fontWeight={600} fill={QUAD[q]} fontFamily="Inter, sans-serif">{s[q].toUpperCase()}</text>
+            ))}
+            <text x={W / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="#5c6577" fontFamily="JetBrains Mono, monospace">{s.rsRatio} →</text>
+            <text x={12} y={H / 2} textAnchor="middle" fontSize="10" fill="#5c6577" fontFamily="JetBrains Mono, monospace" transform={`rotate(-90 12 ${H / 2})`}>{s.rsMom} →</text>
+            {/* tails */}
+            <g clipPath="url(#rrg-clip)">
+            {sectors.map(sec => {
+              const q = quadrant(sec.now.x, sec.now.y), dim = hover && hover.symbol !== sec.symbol
+              return <polyline key={sec.symbol} fill="none" stroke={QUAD[q]} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={dim ? 0.15 : 0.8}
+                points={sec.tail.map(p => `${sx(p.x)},${sy(p.y)}`).join(' ')} markerEnd="url(#rrg-arrow)" style={{ transition: 'opacity .3s' }} />
+            })}
+            </g>
+            {/* bubbles (transform transitions so they glide when the horizon changes) */}
+            {sectors.map(sec => {
+              const q = quadrant(sec.now.x, sec.now.y), r = radius(sec.volRatio), dim = hover && hover.symbol !== sec.symbol
+              return (
+                <g key={sec.symbol} style={{ transform: `translate(${sx(sec.now.x)}px, ${sy(sec.now.y)}px)`, transition: 'transform .6s ease, opacity .3s' }} opacity={dim ? 0.25 : 1}
+                  onMouseEnter={() => setHover(sec)} className="cursor-default">
+                  <circle r={r} fill={QUAD[q]} fillOpacity={0.85} stroke="#0b0e14" strokeWidth={1.5} style={{ transition: 'r .6s ease' }} />
+                  <text y={3.5} textAnchor="middle" fontSize={r >= 14 ? 10 : 8} fill="#0b0e14" fontFamily="JetBrains Mono, monospace" fontWeight={700}>{sec.symbol}</text>
+                </g>
+              )
+            })}
+          </svg>
+          {hover && (
+            <div className="pointer-events-none absolute z-10 rounded border border-line bg-panel-2 px-2 py-1 text-xs text-ink"
+              style={{ left: `${(sx(hover.now.x) / W) * 100}%`, top: `${(sy(hover.now.y) / H) * 100}%`, transform: 'translate(-50%, calc(-100% - 22px))' }}>
+              <div className="font-semibold">{hover.name} <span className="num font-normal text-ink-3">{hover.symbol}</span> · <span style={{ color: QUAD[quadrant(hover.now.x, hover.now.y)] }}>{s[quadrant(hover.now.x, hover.now.y)]}</span></div>
+              <div className="num">{s.rsRatio} {hover.now.x.toFixed(2)} · {s.rsMom} {hover.now.y.toFixed(2)} · {s.volX} {hover.volRatio.toFixed(2)}×</div>
+              <div className="num text-ink-3">{hover.tail[0].date} → {hover.now.date}</div>
+            </div>
+          )}
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-ink-3">{s.rrgNote}</p>
+    </section>
+  )
+}

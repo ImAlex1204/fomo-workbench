@@ -3,7 +3,7 @@ import { fetchHeatmap, type HeatTile } from '../../api'
 import type { Strings } from '../../i18n'
 import { squarify, type Rect } from './squarify'
 
-const W = 1200, H = 640, GAP = 2, HEAD = 14
+const W = 1200, H = 540, GAP = 2, HEAD = 14
 // ±3% saturates; negatives red, positives green, |Δ|<0.1% grey. Same hues as the candles.
 const color = (chg: number) => {
   const t = Math.min(1, Math.abs(chg) / 3)
