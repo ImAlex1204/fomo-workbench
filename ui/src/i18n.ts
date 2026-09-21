@@ -94,6 +94,17 @@ const en = {
     live: 'LIVE',
     pre: 'PRE',
     post: 'POST',
+    market: 'Market',
+    heatmap: 'S&P 500 Heatmap',
+    heatmapNote: 'tile = market cap · color = today\u2019s change · finviz via openbb-api · click a stock to open it',
+    sectors: 'Sector Rotation',
+    sectorsNote: 'Proxy for money flow: sector performance × relative volume (finviz). Not actual fund-flow data.',
+    relVol: 'Rel. Vol',
+    movers: 'Today\u2019s Movers',
+    gainers: 'Top Gainers',
+    losers: 'Top Losers',
+    active: 'Most Active',
+    backToMarket: 'Market',
 }
 
 export type Strings = { [K in keyof typeof en]: string }
@@ -192,6 +203,17 @@ const zh: Strings = {
     live: '即時',
     pre: '盤前',
     post: '盤後',
+    market: '市場總覽',
+    heatmap: 'S&P 500 熱力圖',
+    heatmapNote: '方塊 = 市值 · 顏色 = 當日漲跌 · finviz（經 openbb-api）· 點擊個股進入',
+    sectors: '板塊輪動',
+    sectorsNote: '資金流向代理指標：板塊漲跌 × 相對成交量（finviz）。並非實際資金流入／流出資料。',
+    relVol: '相對量',
+    movers: '今日焦點',
+    gainers: '漲幅排行',
+    losers: '跌幅排行',
+    active: '成交量排行',
+    backToMarket: '市場總覽',
 }
 
 export const t = (lang: Lang): Strings => (lang === 'en' ? en : zh)

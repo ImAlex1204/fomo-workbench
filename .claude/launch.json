@@ -3,12 +3,15 @@
   "configurations": [
     {
       "name": "openbb-api",
-      "runtimeExecutable": "envs/openbb/bin/openbb-api",
+      "runtimeExecutable": "envs/openbb/bin/uvicorn",
       "runtimeArgs": [
+        "openbb_platform_api.main:app",
         "--host",
         "127.0.0.1",
         "--port",
-        "6900"
+        "6900",
+        "--workers",
+        "3"
       ],
       "port": 6900
     },

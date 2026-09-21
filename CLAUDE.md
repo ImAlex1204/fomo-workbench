@@ -237,7 +237,7 @@
 - 實際登記了**四個** Backends（比原規劃多一個 openbb-mcp，因為 Phase 5 改簡單路線後 MCP 是獨立服務）：
   | 名稱 | Command | Port |
   |---|---|---|
-  | OpenBB API（內建） | `openbb-api --host 127.0.0.1 --port 6900` | 6900 |
+  | OpenBB API（內建，**Phase 15 改成 3 worker**） | `uvicorn openbb_platform_api.main:app --host 127.0.0.1 --port 6900 --workers 3` | 6900 |
   | OpenBB MCP（內建，**已改**：原預設 port 8001 跟 backend 撞，改成 8005 + 類別限制） | `openbb-mcp --transport streamable-http --host 127.0.0.1 --port 8005 --allowed-categories equity,news,index --default-categories equity,news,index` | 8005 |
   | openbb-backend | `/Users/alexchiang/Desktop/Coding/FinGPT/envs/finrl/bin/uvicorn main:app --port 8001 --app-dir /Users/alexchiang/Desktop/Coding/FinGPT/openbb-backend` | 8001 |
   | agent | `/Users/alexchiang/Desktop/Coding/FinGPT/envs/fingpt/bin/uvicorn main:app --port 8010 --app-dir /Users/alexchiang/Desktop/Coding/FinGPT/agent` | 8010 |
@@ -353,6 +353,22 @@
 
 - 既有檔只改 `App.tsx`、`api.ts`、`i18n.ts`。
 - 驗收：AAPL 四年損益分組長條、資產負債三線 + 流動比率 0.89、現金流三色長條 + FCF 線；JPM 流動比率「—」；hover 提示正確；正式版 8001 已 build。
+
+## Phase 15：市場總覽首頁（全市場資訊）
+
+**狀態：已於 2026-09-21 完成**。使用者希望「開網頁先看全市場」。決策：市場總覽是**預設首頁**（`App.tsx` 的 `view: 'market' | 'stock'`），輸入代號、點熱力圖或排行才進入個股六分頁；頂欄的標題／「← 市場總覽」回首頁。**個股面板在第一次開啟某檔後才掛載**（`stockOpened`），首頁不會先打 30 個 AAPL 請求。四張卡（`ui/src/components/market/`）：
+
+| 卡 | 檔案 | 資料（都經 openbb-api，免金鑰） | 備註 |
+|---|---|---|---|
+| 指數列 | `IndexStrip.tsx` | `equity/price/historical?symbol=^GSPC,^DJI,^IXIC,^RUT,^VIX,^TNX&interval=5m`（**一次批次**，0.8s） | 現價、漲跌%、當日 5 分 K sparkline；昨收 = 前一交易日最後一根 5 分 K；60 秒輪詢。**不要用 `index/price/historical` 多 symbol**——它逐檔抓、6 檔要 12 秒 |
+| S&P 500 熱力圖 | `Heatmap.tsx` + `squarify.ts` | `equity/screener?provider=finviz&index=sp500&limit=600` → 503 檔含 sector／industry／市值／`Change %`（小數） | 純 SVG squarified treemap：先 sector 後個股，方塊 = 市值、顏色 = 當日漲跌（±3% 飽和），hover 顯示名稱／產業／市值／漲跌，**點擊進個股**；5 分鐘輪詢；finviz 有重複 symbol，UI 端去重 |
+| 板塊輪動 | `SectorRotation.tsx` | `equity/compare/groups?provider=finviz&group=sector&metric=performance` | 11 個 sector 的 1D／1W／1M 漲跌橫條 + 相對成交量；**資金流向的代理指標，卡片下方明示「非實際資金流入／流出資料」**（真正的 fund flow 是付費資料） |
+| 今日焦點 | `Movers.tsx` | `equity/discovery/{gainers,losers,active}?provider=yfinance&limit=10` | 三欄，點擊進個股 |
+
+**重要的基礎設施發現與修正**：finviz screener（約 10 秒）會**卡住整個 openbb-api**（OpenBB 的 finviz provider 在 async 端點裡做同步抓取，期間連 `/` 都要等 6 秒，所有分頁一起停擺）。解法：openbb-api 改成 **uvicorn 3 個 worker**——`openbb-api` 啟動器的 `--workers` 有 bug（字串傳給 uvicorn 會 TypeError），改直接起 `uvicorn openbb_platform_api.main:app --host 127.0.0.1 --port 6900 --workers 3`（差別只是不產生 Workspace 用的 widgets.json）。**ODP Desktop 的「OpenBB API」command 已改成這條**，`.claude/launch.json` 同步。實測：screener 10 秒期間，root 2ms、排行 1.1s、指數 1.6s。約多用 600 MB 記憶體。
+
+- 驗收：首頁 4 秒內指數／板塊／排行載入、熱力圖約 10 秒；點 NVDA 進個股（盤中，頂欄綠色「即時」——同時驗證了 Phase 10B 的正規盤即時更新）；「← 市場總覽」返回；正式版 8001 已 build。
+- 既有檔改動：`App.tsx`（view 狀態、lazy mount、服務探測改每 60 秒）、`TopBar.tsx`（首頁隱藏報價、返回鍵、輸入框跟隨 ticker）、`api.ts`／`i18n.ts`。
 
 ## 延伸與維護原則（給未來的你，或未來的 Claude Code session）
 

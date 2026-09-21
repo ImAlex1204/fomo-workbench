@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Bar, Quote, Tick } from '../api'
 import type { Lang, Strings } from '../i18n'
 
-export default function TopBar({ ticker, quote, bars, tick, lang, s, online, onTicker, onLang }:
-  { ticker: string; quote: Quote | null; bars: Bar[]; tick: Tick | null; lang: Lang; s: Strings; online: number; onTicker: (t: string) => void; onLang: (l: Lang) => void }) {
+export default function TopBar({ ticker, quote, bars, tick, lang, s, online, view, onTicker, onHome, onLang }:
+  { ticker: string; quote: Quote | null; bars: Bar[]; tick: Tick | null; lang: Lang; s: Strings; online: number; view: 'market' | 'stock'; onTicker: (t: string) => void; onHome: () => void; onLang: (l: Lang) => void }) {
   const [draft, setDraft] = useState(ticker)
+  useEffect(() => setDraft(ticker), [ticker])  // ticker can also change from the heatmap / movers
   // Price/change come from the daily bars: the yfinance quote endpoint returns last_price/prev_close only intermittently.
   // With a live tick, use its price and Yahoo's change vs. previous regular close (covers pre/post-market too).
   const last = tick?.price ?? bars.at(-1)?.close, prev = bars.at(-2)?.close
@@ -13,12 +14,13 @@ export default function TopBar({ ticker, quote, bars, tick, lang, s, online, onT
   const session = tick?.market_hours === 1 ? s.live : tick?.market_hours === 0 ? s.pre : tick?.market_hours === 2 || tick?.market_hours === 3 ? s.post : null
   return (
     <header className="flex flex-wrap items-center gap-4 px-5 py-3">
-      <span className="text-base font-bold tracking-tight">{s.title}</span>
+      <button onClick={onHome} className="text-base font-bold tracking-tight hover:text-accent" title={s.backToMarket}>{s.title}</button>
+      {view === 'stock' && <button onClick={onHome} className="text-xs text-ink-3 hover:text-ink-2">← {s.backToMarket}</button>}
       <form onSubmit={e => { e.preventDefault(); onTicker(draft.trim().toUpperCase()) }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} aria-label={s.ticker}
           className="num w-28 rounded-lg border border-line bg-panel px-3 py-1.5 text-sm uppercase outline-none focus:border-accent" />
       </form>
-      {last !== undefined && (
+      {view === 'stock' && last !== undefined && (
         <div className="flex items-baseline gap-3">
           {quote?.name && <span className="text-sm text-ink-2">{quote.name}</span>}
           <span className={`num text-xl font-semibold ${up ? 'text-up glow-up' : 'text-down glow-down'}`}>{last.toFixed(2)}</span>

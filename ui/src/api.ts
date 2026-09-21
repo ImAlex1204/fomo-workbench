@@ -202,3 +202,47 @@ export function applyTick(bars: Bar[], intraday: boolean, tick: Tick): Bar[] {
   const updated = { ...last, close: tick.price, high: Math.max(last.high, tick.price), low: Math.min(last.low, tick.price) }
   return [...bars.slice(0, -1), updated]
 }
+
+// ---- Market overview (Phase 15) ----
+export const INDICES: [string, string][] = [['^GSPC', 'S&P 500'], ['^DJI', 'Dow'], ['^IXIC', 'Nasdaq'], ['^RUT', 'Russell 2000'], ['^VIX', 'VIX'], ['^TNX', 'US 10Y']]
+export type IndexQuote = { symbol: string; name: string; last: number; prevClose: number; spark: number[]; date: string }
+export type HeatTile = { symbol: string; name: string; sector: string; industry: string; market_cap: number; price: number; change: number; volume: number }
+export type SectorPerf = { name: string; d1: number | null; w1: number | null; m1: number | null; relVolume: number | null }
+export type Mover = { symbol: string; name: string; price: number; percent_change: number; volume: number; market_cap?: number }
+
+export async function fetchIndices(): Promise<IndexQuote[]> {
+  // One batched request via the equity endpoint (0.8s) — the index endpoint fetches symbols one by one (~12s for six).
+  // Previous close = last 5m bar of the prior session, so no second (daily) request is needed.
+  const syms = INDICES.map(([s]) => s).join(',')
+  const since = new Date(Date.now() - 7 * 86400e3).toISOString().slice(0, 10)
+  type Row = { symbol: string; date: string; close: number }
+  const d = await json<{ results: Row[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${syms}&provider=yfinance&start_date=${since}&interval=5m`)
+  return INDICES.map(([symbol, name]) => {
+    const rows = d.results.filter(r => r.symbol === symbol).sort((a, b) => a.date.localeCompare(b.date))
+    const days = [...new Set(rows.map(r => r.date.slice(0, 10)))]
+    const lastDay = days[days.length - 1] ?? '', prevDay = days[days.length - 2]
+    const session = rows.filter(r => r.date.startsWith(lastDay))
+    const prevSession = prevDay ? rows.filter(r => r.date.startsWith(prevDay)) : []
+    const last = session[session.length - 1]?.close ?? 0
+    return { symbol, name, last, prevClose: prevSession[prevSession.length - 1]?.close ?? last, spark: session.map(r => r.close), date: lastDay }
+  })
+}
+export async function fetchHeatmap(): Promise<HeatTile[]> {
+  type Row = Record<string, unknown>
+  const d = await json<{ results: Row[] }>(`${OPENBB}/api/v1/equity/screener?provider=finviz&index=sp500&limit=600`)
+  const seen = new Set<string>()
+  return d.results.filter(r => r.market_cap && r.sector && !seen.has(String(r.symbol)) && seen.add(String(r.symbol))).map(r => ({
+    symbol: String(r.symbol), name: String(r.name ?? ''), sector: String(r.sector), industry: String(r.industry ?? ''),
+    market_cap: Number(r.market_cap), price: Number(r.price ?? 0), change: Number(r['Change %'] ?? 0) * 100, volume: Number(r.volume ?? 0),
+  }))
+}
+export async function fetchSectors(): Promise<SectorPerf[]> {
+  type Row = Record<string, number | string | null>
+  const d = await json<{ results: Row[] }>(`${OPENBB}/api/v1/equity/compare/groups?provider=finviz&group=sector&metric=performance`)
+  const pct = (v: unknown) => (typeof v === 'number' ? v * 100 : null)
+  return d.results.map(r => ({ name: String(r.name), d1: pct(r['Change %']), w1: pct(r.performance_1w), m1: pct(r.performance_1m), relVolume: typeof r.volume_relative === 'number' ? r.volume_relative : null }))
+}
+export async function fetchMovers(kind: 'gainers' | 'losers' | 'active'): Promise<Mover[]> {
+  const d = await json<{ results: Mover[] }>(`${OPENBB}/api/v1/equity/discovery/${kind}?provider=yfinance&limit=10`)
+  return d.results.map(m => ({ ...m, percent_change: m.percent_change * 100 }))
+}
