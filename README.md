@@ -77,7 +77,8 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
   prices, news and fundamentals; returns `[Positive Developments] / [Potential Concerns] /
   [Prediction & Analysis]`. Runs locally in fp16 on the Mac's GPU (~6 tok/s).
 - **Agent.** ~150 lines, no framework: Gemini function-calling over five `openbb-mcp` tools
-  plus `fingpt_forecast`, streamed to the UI as SSE. The only cloud dependency in the project.
+  plus `fingpt_forecast` and `finrl_signal`, streamed to the UI as SSE — so one question can
+  cite both engines and point out where they disagree. The only cloud dependency in the project.
 - **UI.** One component per card; tabs stay mounted so charts and chat survive switching.
 
 ### Decisions worth knowing

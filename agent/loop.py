@@ -6,7 +6,7 @@ import os
 from google import genai
 from google.genai import types
 
-from tools import fingpt_tool
+from tools import fingpt_tool, finrl_tool
 
 MCP_TOOLS = ["equity_profile", "equity_price_quote", "equity_price_historical", "news_company", "equity_fundamental_metrics"]
 MAX_ROUNDS = 8
@@ -17,8 +17,12 @@ Answer questions about stocks using the OpenBB data tools (prices, quotes, profi
 When the user wants an outlook, sentiment, or "what does FinGPT say", call fingpt_forecast(ticker):
 it runs the FinGPT-Forecaster model locally (~1 minute) on OpenBB news and prices, and returns a
 [Positive Developments] / [Potential Concerns] / [Prediction & Analysis] report. Quote its prediction
-and summarize its reasoning; do not invent your own price prediction. Be concise and cite which
-tool each fact came from. FinGPT output is a model opinion, not investment advice."""
+and summarize its reasoning; do not invent your own price prediction. When the user asks about
+trade signals, quant/RL signals, or wants FinRL and FinGPT compared, call finrl_signal(ticker):
+it returns five independent DRL agents' BUY/SELL/HOLD intents for a DOW 30 stock (fast). Report
+the agents individually, note where they disagree with each other or with FinGPT, and never
+merge them into a single recommendation. Be concise and cite which tool each fact came from.
+FinGPT and FinRL outputs are model opinions, not investment advice."""
 
 
 def _gemini_schema(schema):
@@ -46,6 +50,9 @@ class Agent:
         decls.append(types.FunctionDeclaration(
             name="fingpt_forecast", description=fingpt_tool.forecast.__doc__,
             parameters={"type": "object", "properties": {"ticker": {"type": "string", "description": "Stock ticker, e.g. AAPL"}}, "required": ["ticker"]}))
+        decls.append(types.FunctionDeclaration(
+            name="finrl_signal", description=finrl_tool.signal.__doc__,
+            parameters={"type": "object", "properties": {"ticker": {"type": "string", "description": "DOW 30 stock ticker, e.g. AAPL"}}, "required": ["ticker"]}))
         self.config = types.GenerateContentConfig(
             system_instruction=SYSTEM, tools=[types.Tool(function_declarations=decls)],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
@@ -53,6 +60,8 @@ class Agent:
     async def call_tool(self, name, args):
         if name == "fingpt_forecast":
             return await asyncio.to_thread(fingpt_tool.forecast, **args)
+        if name == "finrl_signal":
+            return await asyncio.to_thread(finrl_tool.signal, **args)
         res = await self.session.call_tool(name, {**args, "provider": "yfinance"})
         text = "".join(getattr(c, "text", "") for c in res.content)
         return {"error": text} if res.is_error else {"result": text[:RESULT_CHARS]}

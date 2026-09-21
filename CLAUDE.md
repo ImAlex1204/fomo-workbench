@@ -66,7 +66,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
-- `agent/main.py`（SSE 端點）、`loop.py`（Gemini 迴圈）、`tools/fingpt_tool.py`；金鑰在 `agent/.env`（gitignore）
+- `agent/main.py`（SSE 端點）、`loop.py`（Gemini 迴圈）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`（gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
 
@@ -101,7 +101,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 輸出格式 `[Positive Developments]:` / `[Potential Concerns]:` / `[Prediction & Analysis]`，`Prediction: Up/Down by X-Y%` 一行可用正則抓。
 
 **Agent（`agent/loop.py`）**
-- 給 Gemini 的工具只有 6 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ `fingpt_forecast`。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試。
+- 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試。
 - SSE 事件：`tool_call` / `tool_result`（preview 300 字）/ `text` / `error`。
 
 **UI**
