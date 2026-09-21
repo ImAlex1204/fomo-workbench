@@ -11,6 +11,10 @@ Built as a pre-MSc FinTech portfolio project.
 
 > Model output shown in the dashboard is a research aid, not investment advice.
 
+![Market overview](docs/market-overview.png)
+
+![AAPL — chart, FinRL signals and a FinGPT answer on one screen](docs/stock-ai.png)
+
 ## What it shows
 
 **Market overview (landing page)** — index strip with intraday sparklines, S&P 500 treemap by
@@ -29,6 +33,18 @@ sector/market cap/daily change, sector rotation bars, an RRG-style sector bubble
 | Financials | Income statement, balance sheet trend + current ratio, cash-flow bars + free cash flow (4 fiscal years) |
 
 Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), English / 繁體中文.
+
+<details><summary>More screenshots</summary>
+
+| Fundamentals | Technical |
+|---|---|
+| ![](docs/stock-fundamentals.png) | ![](docs/stock-technical.png) |
+
+| Ownership | Financials |
+|---|---|
+| ![](docs/stock-ownership.png) | ![](docs/stock-financials.png) |
+
+</details>
 
 ## Architecture
 
