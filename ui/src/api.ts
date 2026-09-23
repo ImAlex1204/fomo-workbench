@@ -5,8 +5,12 @@ export const AGENT = 'http://127.0.0.1:8010'
 
 export type Bar = { date: string; open: number; high: number; low: number; close: number; volume: number }
 export type Quote = { name?: string }  // other yfinance quote fields are unreliable; price comes from bars
-export type Signal = { ticker: string; as_of: string; close: number; agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number;
-  equity: number[]; return_pct: number }  // equity = the agent's simulated DOW 30 portfolio value over the last 60 sessions (same for every ticker)
+// One basket = five agents trained together on that basket's stocks and window (Phase 17).
+// equity = the agent's simulated portfolio value for the whole basket over the last 60 sessions.
+export type Signal = { agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number; equity: number[]; return_pct: number }
+export type SignalBasket = { id: string; label_en: string; label_zh: string; short: string; note_en: string; note_zh: string;
+  train_start: string; train_end: string; as_of: string; close: number; signals: Signal[] }
+export type Signals = { ticker: string; baskets: SignalBasket[] }
 export type ChatEvent =
   | { type: 'tool_call'; name: string; args: Record<string, unknown> }
   | { type: 'tool_stream'; name: string; text: string }  // FinGPT tokens while fingpt_forecast runs
@@ -36,7 +40,9 @@ export async function fetchHistory(ticker: string, range: Range = '1Y'): Promise
   const { interval, days } = RANGES[range]
   const start = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10)
   const d = await json<{ results: Bar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${ticker}&provider=yfinance&start_date=${start}&interval=${interval}`)
-  const bars = d.results
+  // yfinance sometimes returns a session with open/high/low/volume but close: null (seen 2026-09-22).
+  // A bar with no close is unusable for every consumer — chart, indicators, top-bar price — so drop it here.
+  const bars = d.results.filter(b => b.close != null)
   if (range === '1D' && bars.length) {  // last trading session only
     const day = bars[bars.length - 1].date.slice(0, 10)
     return bars.filter(b => b.date.startsWith(day))
@@ -49,8 +55,8 @@ export async function fetchQuote(ticker: string): Promise<Quote> {
   return d.results[0]
 }
 
-export async function fetchSignals(ticker: string): Promise<Signal[]> {
-  return json<Signal[]>(`${BACKEND}/finrl/signal/${ticker}`)
+export async function fetchSignals(ticker: string): Promise<Signals> {
+  return json<Signals>(`${BACKEND}/finrl/signal/${ticker}`)
 }
 
 export async function* chat(message: string): AsyncGenerator<ChatEvent> {
@@ -265,10 +271,11 @@ export async function fetchSectorEtfs(): Promise<EtfBar[]> {
 }
 
 // ---- Daily brief (agent/brief.py): FinRL + FinGPT over the watchlist after each close, Gemini overview ----
-export type BriefSignal = { agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number }
+export type BriefSignal = { agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shares: number; position: number; return_pct: number }
+export type BriefBasket = { basket: string; trained_on: string; as_of: string; close: number; signals: BriefSignal[] }
 export type BriefItem = {
   ticker: string
-  finrl: { as_of?: string; close?: number; signals?: BriefSignal[]; error?: string } | null
+  finrl: { baskets?: BriefBasket[]; error?: string } | null
   fingpt: { prediction: string | null; analysis: string } | null
   error: string | null
 }

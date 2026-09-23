@@ -28,12 +28,13 @@ CHECK_EVERY_S = 60
 
 SUMMARY_PROMPT = """You are writing the morning brief for a personal stock research workbench. Below are today's
 outputs of two local models for each watchlist stock: FinGPT-Forecaster (news-driven one-week outlook,
-"Prediction: Up/Down by X%") and FinRL (five independent deep-RL agents' BUY/SELL/HOLD intents;
-"shares" is raw intent, "position" simulated holdings). Write:
+"Prediction: Up/Down by X%") and FinRL, whose five deep-RL agents vote BUY/SELL/HOLD — given here as
+tallies per model basket, where a basket is a separate set of agents trained on its own stocks and
+period, so a stock may have several readings. Write:
 - "overview": 2-4 sentences on the watchlist as a whole: where the two engines agree, where they
   conflict, anything notable. Do not add your own forecasts.
 - "tickers": for each ticker, one sentence (max 25 words) stating FinGPT's direction and whether the
-  FinRL agents lean the same way.
+  FinRL agents lean the same way; name the basket only when baskets disagree with each other.
 Return JSON: {"en": {"overview": str, "tickers": {TICKER: str}}, "zh": {same, in Traditional Chinese}}.
 Model outputs are opinions, not advice; do not add disclaimers, the UI shows one.
 
@@ -74,9 +75,20 @@ def _save(brief: dict):
     (BRIEF_DIR / f"{brief['as_of']}.json").write_text(json.dumps(brief, ensure_ascii=False, indent=1))
 
 
+def _finrl_tallies(finrl):
+    """{basket label: "3 BUY / 2 SELL"} — the five rows per basket are too much for the summary prompt."""
+    if not finrl or "baskets" not in finrl:
+        return finrl and finrl.get("error")
+    out = {}
+    for b in finrl["baskets"]:
+        acts = [s["action"] for s in b["signals"]]
+        out[b["basket"]] = f'{acts.count("BUY")} BUY / {acts.count("SELL")} SELL / {acts.count("HOLD")} HOLD'
+    return out
+
+
 async def _summarize(items: list[dict]) -> dict | None:
     data = [{"ticker": i["ticker"], "fingpt": i["fingpt"] and {"prediction": i["fingpt"]["prediction"], "analysis": i["fingpt"]["analysis"]},
-             "finrl": i["finrl"] and i["finrl"].get("signals", i["finrl"].get("error"))} for i in items]
+             "finrl": _finrl_tallies(i["finrl"])} for i in items]
     client = genai.Client()
     model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
     for wait in (5, 30, None):

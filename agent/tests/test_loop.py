@@ -3,6 +3,7 @@ from datetime import datetime, date
 
 import pytest
 
+import brief
 from loop import _gemini_schema
 from tools import fingpt_tool
 
@@ -53,3 +54,19 @@ class _FixedNow:
 def test_last_complete_session(monkeypatch, et_now, expected):
     monkeypatch.setattr(fingpt_tool, "datetime", _FixedNow(et_now))
     assert fingpt_tool.last_complete_session() == expected
+
+
+def test_finrl_tallies_counts_each_basket():
+    finrl = {"baskets": [
+        {"basket": "DOW 30 · 2014", "signals": [{"action": a} for a in ["BUY", "BUY", "SELL", "HOLD", "BUY"]]},
+        {"basket": "Tech 30 · 2019", "signals": [{"action": "SELL"}] * 5},
+    ]}
+    assert brief._finrl_tallies(finrl) == {
+        "DOW 30 · 2014": "3 BUY / 1 SELL / 1 HOLD",
+        "Tech 30 · 2019": "0 BUY / 5 SELL / 0 HOLD",
+    }
+
+
+def test_finrl_tallies_passes_errors_and_none_through():
+    assert brief._finrl_tallies({"error": "XOM is in no FinRL model basket"}) == "XOM is in no FinRL model basket"
+    assert brief._finrl_tallies(None) is None

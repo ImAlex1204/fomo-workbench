@@ -3,10 +3,16 @@ import { fetchBrief, fetchWatchlist, runBrief, saveWatchlist, type BriefItem, ty
 import type { Lang, Strings } from '../../i18n'
 
 const dir = (p: string | null | undefined) => /down/i.test(p ?? '') ? 'down' : /up/i.test(p ?? '') ? 'up' : 'flat'
+/** BUY/SELL counts of the first basket, plus a per-basket breakdown for the tooltip. */
 const tally = (item: BriefItem) => {
-  const sig = item.finrl?.signals
-  if (!sig) return null
-  return { buy: sig.filter(x => x.action === 'BUY').length, sell: sig.filter(x => x.action === 'SELL').length }
+  const baskets = item.finrl?.baskets
+  if (!baskets?.length) return null
+  const count = (b: typeof baskets[number]) => ({
+    buy: b.signals.filter(x => x.action === 'BUY').length,
+    sell: b.signals.filter(x => x.action === 'SELL').length,
+  })
+  const all = baskets.map(b => ({ label: b.basket, ...count(b) }))
+  return { ...all[0], detail: all.map(a => `${a.label}: ${a.buy}B / ${a.sell}S`).join('\n') }
 }
 
 export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strings; onSelect: (symbol: string) => void }) {
@@ -54,7 +60,7 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
               <span className={`num w-28 shrink-0 text-xs ${d === 'up' ? 'text-up' : d === 'down' ? 'text-down' : 'text-ink-3'}`} title={it?.fingpt?.analysis}>
                 {it ? (p ?? (it.error ? '—' : '…')) : s.briefNext}
               </span>
-              <span className="num w-20 shrink-0 text-xs text-ink-3" title={it?.finrl?.error ?? it?.finrl?.signals?.map(x => `${x.agent} ${x.action} ${x.shares}`).join('\n')}>
+              <span className="num w-20 shrink-0 text-xs text-ink-3" title={it?.finrl?.error ?? tl?.detail}>
                 {tl ? <><span className="text-up">{tl.buy}B</span> / <span className="text-down">{tl.sell}S</span></> : it?.finrl?.error ? '—' : ''}
               </span>
               <span className="min-w-0 flex-1 truncate text-ink-2" title={summary?.tickers[t]}>{summary?.tickers[t] ?? ''}</span>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AGENT, BACKEND, OPENBB, RANGES, applyTick, fetchHistory, fetchMetrics, fetchQuote, fetchSignals, subscribeLive, type Bar, type Metrics, type Quote, type Range, type Signal, type Tick } from './api'
+import { AGENT, BACKEND, OPENBB, RANGES, applyTick, fetchHistory, fetchMetrics, fetchQuote, fetchSignals, subscribeLive, type Bar, type Metrics, type Quote, type Range, type Signals, type Tick } from './api'
 import { t, type Lang } from './i18n'
 import AgentChat from './components/AgentChat'
 import FinrlSignals from './components/FinrlSignals'
@@ -24,7 +24,7 @@ export default function App() {
   const [tick, setTick] = useState<Tick | null>(null)  // latest real-time trade from the backend's Yahoo relay
   const [range, setRange] = useState<Range>(() => (localStorage.getItem('range') as Range) || '1Y')
   const [quote, setQuote] = useState<Quote | null>(null)
-  const [signals, setSignals] = useState<Signal[] | null>(null)
+  const [signals, setSignals] = useState<Signals | null>(null)
   const [sigError, setSigError] = useState<string | null>(null)
   const [online, setOnline] = useState(0)
   const [tab, setTab] = useState<Tab>('ai')
@@ -103,7 +103,7 @@ export default function App() {
           <div className="min-h-0 flex-1"><PriceChart bars={series.bars} intraday={series.key.endsWith(':1D') || series.key.endsWith(':1W')} resetKey={series.key} /></div>
         </section>
         <aside className="flex flex-col gap-4 lg:min-h-0">
-          <FinrlSignals signals={signals} error={sigError} s={s} />
+          <FinrlSignals signals={signals} error={sigError} lang={lang} s={s} />
           <AgentChat ticker={ticker} s={s} />
         </aside>
       </main>

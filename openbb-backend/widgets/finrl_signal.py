@@ -1,8 +1,14 @@
-"""GET /finrl/signal/{ticker}: today's trade signal for one DOW 30 ticker from the five Phase 2 agents.
+"""GET /finrl/signal/{ticker}: today's trade signal for one ticker from every model basket that
+contains it, and GET /finrl/baskets: what those baskets are.
+
+Baskets are defined in ../baskets.json (Phase 17): the original DOW 30 models from Phase 2, a
+DOW 30 set retrained on the shorter window, and a tech-weighted set on that same window — so a
+ticker in more than one basket shows how differently-trained agents see the same stock.
 
 Data comes from the local openbb-api (adjusted OHLCV + ^VIX), then goes through the same
 FeatureEngineer / StockTradingEnv setup as FinRL/examples/FinRL_StockTrading_2026_{1,3}*.py.
 """
+import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -14,22 +20,44 @@ from fastapi import APIRouter, HTTPException
 from stable_baselines3 import A2C, DDPG, PPO, SAC, TD3
 
 from finrl.config import INDICATORS
-from finrl.config_tickers import DOW_30_TICKER
 from finrl.meta.env_stock_trading.env_stocktrading import StockTradingEnv
 from finrl.meta.preprocessor.preprocessors import FeatureEngineer
 
 OPENBB_API = "http://127.0.0.1:6900/api/v1"
-MODEL_DIR = Path(__file__).resolve().parents[2] / "finrl-work" / "trained_models"
+ROOT = Path(__file__).resolve().parents[2]
 HISTORY_DAYS = 400  # calendar days; turbulence needs >252 trading days of history
 EPISODE_DAYS = 60  # trading days the agent simulates (starting from cash) before deciding today
 ET = ZoneInfo("America/New_York")
 MARKET_CLOSE = time(16, 0)
+ALGOS = {"a2c": A2C, "ddpg": DDPG, "ppo": PPO, "td3": TD3, "sac": SAC}
 
-MODELS = {name: cls.load(MODEL_DIR / f"agent_{name}") for name, cls in
-          [("a2c", A2C), ("ddpg", DDPG), ("ppo", PPO), ("td3", TD3), ("sac", SAC)]}
 
+def _load_baskets():
+    """Baskets whose five model files are all present; an untrained one is skipped, not fatal.
+
+    Every basket has 30 stocks, so all the models share one observation/action space and SB3 would
+    happily load another basket's weights: check the manifest train_basket.py writes. The Phase 2
+    dow30 models predate it and have none, so the check is skipped when it is absent."""
+    out = []
+    for b in json.loads((ROOT / "openbb-backend" / "baskets.json").read_text())["baskets"]:
+        d = ROOT / b["model_dir"]
+        if not all((d / f"agent_{n}.zip").exists() for n in ALGOS):
+            print(f"finrl_signal: basket {b['id']} has no models in {d}, skipping")
+            continue
+        manifest = d / "manifest.json"
+        if manifest.exists():
+            m = json.loads(manifest.read_text())
+            if m["basket"] != b["id"] or m["tickers"] != b["tickers"]:
+                raise RuntimeError(f"{manifest} was trained for basket {m['basket']} with a different "
+                                   f"ticker list; retrain {b['id']} or fix its model_dir")
+        out.append({**b, "models": {n: cls.load(d / f"agent_{n}") for n, cls in ALGOS.items()}})
+    return out
+
+
+BASKETS = _load_baskets()
 router = APIRouter()
-_cache: dict = {}  # {as_of: {"window": df, "agents": {name: {"trade": {tic: shares}, "position": {tic: shares}, "equity": [...]}}}}
+_windows: dict = {}  # {(as_of, tickers_key): df} — depends only on the constituents, so baskets sharing a list share a window
+_signals: dict = {}  # {(as_of, basket_id): {"trade": {tic: shares}, "position": {...}, "equity": [...]}}
 
 
 def fetch_prices(symbols, start):
@@ -48,9 +76,9 @@ def last_complete_session():
     return now.date() if now.time() >= MARKET_CLOSE else now.date() - timedelta(days=1)
 
 
-def build_window(as_of: date):
+def build_window(tickers, as_of: date):
     start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
-    df = fetch_prices(DOW_30_TICKER, start).rename(columns={"symbol": "tic"})
+    df = fetch_prices(tickers, start).rename(columns={"symbol": "tic"})
     df = df[df["date"] <= as_of.isoformat()]
     df["day"] = pd.to_datetime(df["date"]).dt.dayofweek
     df = df[["date", "open", "high", "low", "close", "volume", "tic", "day"]]
@@ -66,7 +94,7 @@ def build_window(as_of: date):
     return window
 
 
-def run_agents(window):
+def run_agents(basket, window):
     n = len(window["tic"].unique())
     env_kwargs = {  # identical to FinRL_StockTrading_2026_3_Backtest.py
         "hmax": 100, "initial_amount": 1_000_000, "num_stock_shares": [0] * n,
@@ -76,7 +104,7 @@ def run_agents(window):
     }
     tics = sorted(window["tic"].unique())  # env state/action order
     out = {}
-    for name, model in MODELS.items():
+    for name, model in basket["models"].items():
         env = StockTradingEnv(df=window, turbulence_threshold=70, risk_indicator_col="vix", **env_kwargs)
         # Same loop as DRLAgent.DRL_prediction, but stopped one step early: after the last real
         # day the VecEnv would auto-reset and lose the holdings. obs now reflects today's close.
@@ -93,34 +121,50 @@ def run_agents(window):
             trade = np.full(n, -env.hmax)
         position = np.array(env.state[1 + n:1 + 2 * n]).astype(int)
         # env.asset_memory: total assets after each simulated day (initial cash first, today's close last).
-        # Portfolio-level (all 30 stocks), so it is the same curve for every ticker of that agent.
+        # Portfolio-level (the whole basket), so it is the same curve for every ticker of that agent.
         out[name] = {"trade": dict(zip(tics, trade.tolist())), "position": dict(zip(tics, position.tolist())),
                      "equity": [round(float(v)) for v in env.asset_memory]}
     return out
 
 
-def signals_for_today():
-    as_of = last_complete_session()
-    if as_of not in _cache:
-        _cache.clear()
-        window = build_window(as_of)
-        _cache[as_of] = {"window": window, "agents": run_agents(window)}
-    return _cache[as_of]
+def basket_signals(basket, as_of: date):
+    """Cached per (session, basket); the price window is shared by baskets with the same tickers."""
+    wkey = (as_of, ",".join(basket["tickers"]))
+    if wkey not in _windows:
+        for cache in (_windows, _signals):  # keep only the current session (several baskets share it)
+            for stale in [k for k in cache if k[0] != as_of]:
+                del cache[stale]
+        _windows[wkey] = build_window(basket["tickers"], as_of)
+    skey = (as_of, basket["id"])
+    if skey not in _signals:
+        _signals[skey] = run_agents(basket, _windows[wkey])
+    return _windows[wkey], _signals[skey]
+
+
+@router.get("/finrl/baskets")
+def baskets():
+    return [{k: b[k] for k in ("id", "label_en", "label_zh", "short", "note_en", "note_zh",
+                               "train_start", "train_end", "seed", "tickers")} for b in BASKETS]
 
 
 @router.get("/finrl/signal/{ticker}")
 @router.get("/finrl/signal")
 def finrl_signal(ticker: str = "AAPL"):
     ticker = ticker.upper()
-    if ticker not in DOW_30_TICKER:
-        raise HTTPException(404, f"{ticker} is not in the DOW 30 the FinRL agents were trained on")
-    data = signals_for_today()
-    last = data["window"][data["window"]["tic"] == ticker].iloc[-1]
-    rows = []
-    for agent, a in data["agents"].items():
-        shares = a["trade"][ticker]
-        rows.append({"ticker": ticker, "as_of": last["date"], "close": round(float(last["close"]), 2),
-                     "agent": agent, "action": "BUY" if shares > 0 else "SELL" if shares < 0 else "HOLD",
-                     "shares": shares, "position": a["position"][ticker],
-                     "equity": a["equity"], "return_pct": round((a["equity"][-1] / a["equity"][0] - 1) * 100, 2)})
-    return rows
+    matches = [b for b in BASKETS if ticker in b["tickers"]]
+    if not matches:
+        raise HTTPException(404, f"{ticker} is not in any FinRL model basket "
+                                 f"({', '.join(b['id'] for b in BASKETS)})")
+    out = []
+    for basket in matches:
+        window, agents = basket_signals(basket, last_complete_session())
+        last = window[window["tic"] == ticker].iloc[-1]
+        rows = []
+        for agent, a in agents.items():
+            shares = a["trade"][ticker]
+            rows.append({"agent": agent, "action": "BUY" if shares > 0 else "SELL" if shares < 0 else "HOLD",
+                         "shares": shares, "position": a["position"][ticker],
+                         "equity": a["equity"], "return_pct": round((a["equity"][-1] / a["equity"][0] - 1) * 100, 2)})
+        out.append({k: basket[k] for k in ("id", "label_en", "label_zh", "short", "note_en", "note_zh", "train_start", "train_end")}
+                   | {"as_of": last["date"], "close": round(float(last["close"]), 2), "signals": rows})
+    return {"ticker": ticker, "baskets": out}

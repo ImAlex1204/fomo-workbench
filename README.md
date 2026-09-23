@@ -73,10 +73,11 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
 - **Data layer — OpenBB Platform** (`openbb-api`). Every widget goes through it unless it lacks a
   free provider for that item (EPS history/estimates, 13F holders, real-time ticks) — those three
   use the `yfinance` package directly inside `openbb-backend/widgets/`, one file each.
-- **Signal layer — FinRL.** Five agents (A2C/DDPG/PPO/TD3/SAC) trained on the DOW 30 with the
-  upstream example scripts. The endpoint rebuilds the exact upstream feature pipeline and
-  environment from OpenBB data, replays the last 60 sessions, and reports each agent's intent
-  for today plus its simulated position.
+- **Signal layer — FinRL.** Five agents (A2C/DDPG/PPO/TD3/SAC) trained jointly on a basket of 30
+  stocks. The endpoint rebuilds the exact upstream feature pipeline and environment from OpenBB
+  data, replays the last 60 sessions, and reports each agent's intent for today, its simulated
+  position and the basket portfolio's 60-session curve. Three baskets are trained, so a stock in
+  more than one gets several independent readings — see *A small experiment* below.
 - **Insight layer — FinGPT-Forecaster.** The upstream prompt format fed with OpenBB profile,
   prices, news and fundamentals; returns `[Positive Developments] / [Potential Concerns] /
   [Prediction & Analysis]`. Runs locally in fp16 on the Mac's GPU (~6 tok/s).
@@ -84,6 +85,34 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
   plus `fingpt_forecast` and `finrl_signal`, streamed to the UI as SSE — so one question can
   cite both engines and point out where they disagree. The only cloud dependency in the project.
 - **UI.** One component per card; tabs stay mounted so charts and chat survive switching.
+
+### A small experiment: three model baskets
+
+A deep-RL agent here decides across a whole basket at once, so it only knows the stocks it was
+trained on. Rather than retraining once and losing the baseline, the project keeps three sets and
+lets you switch between them on the signal panel:
+
+| Basket | Constituents | Training window |
+|---|---|---|
+| `DOW 30 · 2014` | DOW 30 | 2014-01 – 2025-12 (the original Phase 2 models) |
+| `DOW 30 · 2019` | DOW 30 | 2019-07 – 2025-12 |
+| `Tech 30 · 2019` | tech-weighted 30 | 2019-07 – 2025-12 |
+
+The middle one exists so the comparison is attributable: `Tech 30 · 2019` vs `DOW 30 · 2019`
+isolates the constituents, `DOW 30 · 2014` vs `DOW 30 · 2019` isolates the training period. Seven
+tickers are in both baskets (AAPL, AMZN, CRM, CSCO, IBM, MSFT, NVDA) and are the directly
+comparable samples.
+
+The window starts in 2019-07 because CRWD, the shortest history in the tech basket, IPO'd in
+2019-06 — and because of a trap worth naming: upstream's `FeatureEngineer.clean_data` pivots
+closes and calls `dropna(axis=1)`, so **any member that does not span the whole window is silently
+dropped from the basket**. Training the tech basket from 2014 yields a 28-stock model that reports
+no error and simply never mentions CRWD or UBER. `training/train_basket.py` turns that into a hard
+failure instead.
+
+All three sets use the upstream defaults — 20,000 timesteps, one seed, one run, no validation
+split — so differences between baskets describe *these training runs*, not tech vs. blue-chip
+investing. The UI says so on the panel.
 
 ### Decisions worth knowing
 
@@ -103,7 +132,8 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
 
 ### Honest limitations
 
-- FinRL agents only know the DOW 30; other tickers get a 404 on that panel.
+- FinRL agents only know the 30 stocks in their basket; a ticker in none of the three gets a 404
+  on that panel. FinGPT still answers for it, though it is fine-tuned on the DOW 30.
 - FinGPT is fine-tuned on the DOW 30 too, samples stochastically, and takes 60–90 s per call.
 - Free data: daily/delayed for most panels; the tick stream uses Yahoo's unofficial WebSocket
   and silently falls back to 60 s polling if it breaks. FINRA dark-pool data lags ~2 weeks.
@@ -167,7 +197,8 @@ cd openbb-backend && ../envs/finrl/bin/python -m pytest   # imports the trained 
 ## Repository layout
 
 ```
-openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; serves ui/dist; tests/
+openbb-backend/   FastAPI: finrl_signal, eps_trend, institutional, live_quote; baskets.json; serves ui/dist; tests/
+training/         train_basket.py — trains one basket's five agents from baskets.json
 agent/            FastAPI + Gemini loop; brief.py (daily brief + scheduler); tools/{fingpt,finrl}_tool.py; tests/
 ui/               React + Vite + Tailwind; src/components/{market,fundamentals,technical,news,ownership,financials}; *.test.ts beside the code
 requirements/     pip freeze of each venv (openbb / finrl / fingpt)

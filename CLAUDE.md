@@ -65,7 +65,8 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了 `applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`_gemini_schema`／`last_complete_session` 要跑；純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
 
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
-- `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
+- `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
+- `training/train_basket.py`：依 `baskets.json` 訓練一組籃子的 5 個 agent（`cd training && ../envs/finrl/bin/python train_basket.py tech30`，約 10–20 分鐘）
 - `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
@@ -83,17 +84,24 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 一律走 openbb-api，provider 固定 `yfinance`（agent 端注入、不讓 LLM 選到付費供應商）。只有三個 widget 例外直接用 `yfinance` 套件：`eps_trend`（openbb 的 EPS 歷史／預估只有付費 provider）、`institutional`（13F 只有 fmp）、`live_quote`（openbb 沒有串流；Yahoo 非官方 WebSocket，壞了 UI 自動退回 60 秒輪詢）。
 - `yfinance` 釘 **0.2.66**：1.x 拿掉 `proxy` 參數會弄壞 FinRL 的 `YahooDownloader`（守則 #4 不改上游）；0.2.58 的財報資料停在 2025-05。`pip install -e FinRL` 帶依賴會把它降回 0.2.58，所以要 `--no-deps`。
 - finviz provider（screener／sector groups）是同步阻塞、約 10 秒，會卡住整個 openbb-api——這是 6900 開 **3 個 worker** 的原因（`openbb-api` 啟動器的 `--workers` 有 bug，要直接起 uvicorn）。
+- yfinance 偶爾會回傳「有 open/high/low/volume 但 `close` 是 `null`」的 K 棒（2026-09-23 實際遇到，那天的 09-22 就是這樣；帶 `adjustment=splits_and_dividends` 的查詢則是整根消失）。`api.ts` 的 `fetchHistory` 會過濾掉 `close == null` 的棒——在源頭擋掉，否則 TopBar 的 `last.toFixed()` 會讓整棵 React 樹崩成空白頁。
 - 頁面同時打多個 yfinance 請求時，`equity/profile`／`fundamental/metrics`／`share_statistics` 偶爾回缺欄位的結果；`api.ts` 的 `firstResult()` 關鍵欄位缺就等 1.5 秒重抓一次。`equity/price/quote` 欄位每次不一致，只拿公司名稱，價格一律由日 K 算。
 - 欄位語意：`dividend_yield` **已是百分比**；yfinance metrics 沒有 EPS，EPS TTM = 近四季 `diluted_earnings_per_share` 加總；`capital_expenditure` 是負數（FCF = OCF + capex）；年報 `limit=5` 實際只有 4 年完整；`ownership/share_statistics` 的 `short_percent_of_float` 是小數；13F 的 `pct_held`／`pct_change` 是小數；finviz `Change %` 是小數。
 - FINRA `darkpool/otc` 的 `update_date` 是**發布日**（openbb 丟掉了 `weekStartDate`）；T1 ATS 的資料週 = 發布日往前 21 天所在週的週一。
 - 不能用／不要用的端點：`index/price/historical` 多 symbol 逐檔抓（6 檔 12 秒，改用 `equity/price/historical` 批次）；`shorts/fails_to_deliver`（SEC 站連不上）；`shorts/short_volume`（stockgrid 回空）；`ownership/major_holders`、`ownership/institutional`、`estimates/forward_eps`、`historical_eps` 只有付費 provider；`sec` provider 的 `insider_trading` 不理 `limit`（UI 端切）。
 - 技術指標用 openbb-api `POST /technical/{sma,stoch,macd,bbands}`（body = bars），欄位名像 `close_SMA_20`、`STOCHk_14_3_3`、`close_MACD_12_26_9`、`close_BBU_20_2.0`。
 
-**FinRL（`openbb-backend/widgets/finrl_signal.py`）**
-- 五個模型是**對 DOW 30 一起決策**的（action_space=30），端點只是取出該 ticker 那一欄；非 DOW 30 回 404。
+**FinRL（`openbb-backend/widgets/finrl_signal.py`、`openbb-backend/baskets.json`、`training/train_basket.py`）**
+- **三個模型籃**（Phase 17，`baskets.json`）：`dow30`（道瓊 30 · 2014–2025，Phase 2 原始，未固定種子）、`dow30-2019`（同成分、2019-07 起）、`tech30`（科技 30、2019-07 起，種子 2026）。後兩者成對出現是為了把「訓練期間差異」與「成分差異」分開歸因；7 檔重疊（AAPL AMZN CRM CSCO IBM MSFT NVDA）是可直接比較的樣本。
+- 每個籃子的 5 個模型是**對該籃 30 檔一起決策**的（action_space=30），端點取出該 ticker 那一欄；`/finrl/signal/{ticker}` 回傳**所有包含該代號的籃子**（`{ticker, baskets:[...]}`），都不包含才 404。另有 `/finrl/baskets` 列出籃子定義。
+- `baskets.json` 的 ticker 清單是**凍結的副本**，不再讀上游 `config_tickers`——模型的 action space 綁死在訓練時的那份清單與順序上，上游若更新成分股會造成無聲錯位。
+- 推論用的價格窗口只取決於**成分股清單**（與訓練窗口無關），所以 `dow30` 與 `dow30-2019` 共用同一份窗口；快取是 `_windows[(as_of, 清單)]` + `_signals[(as_of, 籃子)]`，換日才清（**不要**在遇到新清單時 `clear()`，同一天兩個籃子會互相洗掉對方）。
+- 新增一個籃子：`baskets.json` 加一段 → 跑 `train_basket.py <id>` → 重啟 backend（模型在 import 時載入）。模型檔不存在的籃子會被跳過並印警告，服務照常啟動。
 - 資料要用 `adjustment=splits_and_dividends`（與訓練資料一致），跟 K 線圖的未還原價只有最新一天相同。
 - `shares` = 模型今天的**原始意圖**（`predict × hmax`，未被現金／持股裁切），`position` = 從現金起算模擬 `EPISODE_DAYS=60` 天後的持股。agent 幾乎都在 episode 開頭建倉後長抱，所以單看「今天的 action」多半是 0；改 `EPISODE_DAYS` 會改變訊號。沒有呼叫上游 `DRL_prediction`（跑完 VecEnv 會 reset、持倉消失），自己寫了 8 行迴圈。
-- 每列另有 `equity`（該 agent 60 天模擬的**整體 30 檔組合**總資產，60 個點，同一 agent 每檔相同）與 `return_pct`；UI 的「60 日模擬」欄畫成 sparkline，用來判斷五個 agent 近期誰比較可信（2026-09-21 加）。
+- 每列另有 `equity`（該 agent 60 天模擬的**整個籃子**總資產，60 個點，同一 agent 每檔相同）與 `return_pct`；UI 的「60 日模擬」欄畫成 sparkline，用來判斷五個 agent 近期誰比較可信（2026-09-21 加）。
+- **訓練資料的隱形陷阱（Phase 17 實測）**：上游 `FeatureEngineer.clean_data` 會把 close 樞紐成 date×tic 後 `dropna(axis=1)`，**任何在窗口內有缺日的成分股會被整檔刪掉、不報錯**——用 2014 起點訓練 tech30 會 30 檔進、28 檔出（CRWD、UBER 消失），你還以為訓練了 30 檔。`train_basket.py` 因此把「有成分股被刪」與「網格有缺格」都改成硬錯誤。（script 1 後面那個 `fillna(0)` 作用在已清洗的資料上，實際是空操作，不是這個問題的來源。）
+- 所有籃子都是 `total_timesteps=20000`、**單一種子、單次訓練、無驗證集**：籃子之間的差異只能說明「這幾次訓練跑出來的結果」，不能當成「科技股籃比道瓊籃好／壞」的結論。這句話要留在 UI 與 README 裡。
 - 每個交易日第一次呼叫約 4 秒，之後快取 6 ms。
 
 **FinGPT（`agent/tools/fingpt_tool.py`）**
@@ -112,6 +120,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
 
 **UI**
+- FinRL 面板（`FinrlSignals.tsx`）有籃子切換鈕（短標籤 `DOW·14` / `DOW·19` / `TECH·19`，全名與說明在 tooltip），選擇存 `localStorage.basket` 且跨代號沿用，該代號沒有該籃時退回第一個；籃子的說明文字顯示在表格下方。
 - 六個分頁與市場總覽都**保持掛載、用 `hidden` 切換**（不是條件渲染），聊天紀錄與圖才不會消失；個股面板在第一次開啟某檔後才掛載（`stockOpened`）。
 - Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，每張圖都有 `ResizeObserver → fitContent()`。切換區間時 bars 與它所屬的 `ticker:range` key 要放在**同一個 state**，並用 `alive` 旗標丟掉過期 fetch。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。

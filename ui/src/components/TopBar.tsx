@@ -9,7 +9,7 @@ export default function TopBar({ ticker, quote, bars, tick, lang, s, online, vie
   // Price/change come from the daily bars: the yfinance quote endpoint returns last_price/prev_close only intermittently.
   // With a live tick, use its price and Yahoo's change vs. previous regular close (covers pre/post-market too).
   const last = tick?.price ?? bars.at(-1)?.close, prev = bars.at(-2)?.close
-  const pct = tick?.change_percent ?? (last !== undefined && prev ? ((last - prev) / prev) * 100 : null)
+  const pct = tick?.change_percent ?? (last != null && prev ? ((last - prev) / prev) * 100 : null)
   const up = (pct ?? 0) >= 0
   const session = tick?.market_hours === 1 ? s.live : tick?.market_hours === 0 ? s.pre : tick?.market_hours === 2 || tick?.market_hours === 3 ? s.post : null
   return (
@@ -20,7 +20,7 @@ export default function TopBar({ ticker, quote, bars, tick, lang, s, online, vie
         <input value={draft} onChange={e => setDraft(e.target.value)} aria-label={s.ticker}
           className="num w-28 rounded-lg border border-line bg-panel px-3 py-1.5 text-sm uppercase outline-none focus:border-accent" />
       </form>
-      {view === 'stock' && last !== undefined && (
+      {view === 'stock' && last != null && (
         <div className="flex items-baseline gap-3">
           {quote?.name && <span className="text-sm text-ink-2">{quote.name}</span>}
           <span className={`num text-xl font-semibold ${up ? 'text-up glow-up' : 'text-down glow-down'}`}>{last.toFixed(2)}</span>
