@@ -1,4 +1,6 @@
-# OpenBB × AI4Finance Workbench
+# FOMO Workbench
+
+*A research cockpit for the stocks you can't stop checking.*
 
 A local, single-page financial research dashboard that puts three things on one screen:
 raw market data from **OpenBB**, quantitative trade signals from **FinRL** (deep RL agents),
@@ -13,7 +15,7 @@ Built as a pre-MSc FinTech portfolio project.
 
 ![Market overview](docs/market-overview.png)
 
-![AAPL — chart, FinRL signals, and the agent comparing FinRL's five agents with FinGPT's outlook](docs/stock-ai.png)
+![AAPL — price, the five FinRL agents of the selected model basket, and the agent panel](docs/stock-ai.png)
 
 ## What it shows
 
@@ -101,7 +103,9 @@ lets you switch between them on the signal panel:
 The middle one exists so the comparison is attributable: `Tech 30 · 2019` vs `DOW 30 · 2019`
 isolates the constituents, `DOW 30 · 2014` vs `DOW 30 · 2019` isolates the training period. Seven
 tickers are in both baskets (AAPL, AMZN, CRM, CSCO, IBM, MSFT, NVDA) and are the directly
-comparable samples.
+comparable samples — switch between them on the panel and the same stock reads differently:
+
+![The FinRL panel with the basket switcher](docs/finrl-baskets.png)
 
 The window starts in 2019-07 because CRWD, the shortest history in the tech basket, IPO'd in
 2019-06 — and because of a trap worth naming: upstream's `FeatureEngineer.clean_data` pivots

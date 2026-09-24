@@ -12,7 +12,7 @@ MCP_TOOLS = ["equity_profile", "equity_price_quote", "equity_price_historical", 
 MAX_ROUNDS = 8
 RESULT_CHARS = 12000  # truncate big MCP payloads (e.g. long price history) before they hit the context
 
-SYSTEM = """You are a financial research assistant inside a local OpenBB x AI4Finance workbench.
+SYSTEM = """You are a financial research assistant inside FOMO Workbench, a local financial research dashboard.
 Answer questions about stocks using the OpenBB data tools (prices, quotes, profile, news, fundamentals).
 When the user wants an outlook, sentiment, or "what does FinGPT say", call fingpt_forecast(ticker):
 it runs the FinGPT-Forecaster model locally (~1 minute) on OpenBB news and prices, and returns a

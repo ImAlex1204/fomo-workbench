@@ -1,4 +1,4 @@
-# 專案簡報：OpenBB × AI4Finance 本機金融智能工作台
+# 專案簡報：FOMO Workbench（本機金融智能工作台）
 
 > 這份檔案命名為 `CLAUDE.md` 並非偶然——把它放在專案根目錄，Claude Code 每次啟動時會自動讀取，不需要每次重新解釋這個專案的來龍去脈。
 

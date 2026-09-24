@@ -1,7 +1,7 @@
 export type Lang = 'en' | 'zh'
 
 const en = {
-    title: 'FinGPT Workbench',
+    title: 'FOMO Workbench',
     ticker: 'Ticker',
     chart: 'Price',
     signals: 'FinRL Signals',
@@ -135,7 +135,7 @@ const en = {
 export type Strings = { [K in keyof typeof en]: string }
 
 const zh: Strings = {
-    title: 'FinGPT 工作台',
+    title: 'FOMO 工作台',
     ticker: '代號',
     chart: '價格',
     signals: 'FinRL 訊號',
