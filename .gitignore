@@ -11,3 +11,4 @@ ui/dist/
 .pytest_cache/
 agent/watchlist.json
 agent/briefs/
+.ruff_cache/

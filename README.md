@@ -213,9 +213,14 @@ OpenBB 4.7.2 · FinRL `2334a5f` (2026-07) · FinGPT `cefb3a2` (2026-09) · stabl
 torch 2.14 / transformers 5.17 / peft 0.21 · yfinance 0.2.66 (pinned: 1.x breaks FinRL's downloader) ·
 React 19 / Vite 8 / Lightweight Charts 5.
 
-## License note
+## License
 
-OpenBB's platform is AGPL-3.0 at the time of writing. This project is for local personal use;
-deploying it as a network service would trigger AGPL's source-disclosure terms for the glue code
-as well. OpenBB has announced a move to a permissive license as part of its wind-down; check the
-upstream `LICENSE` before deploying.
+The code in this repository — `openbb-backend/`, `agent/`, `ui/`, `training/` — is MIT licensed
+(see `LICENSE`). Nothing from upstream is vendored here: FinRL and FinGPT (both MIT) are cloned
+separately as dependencies, and the OpenBB Platform is never imported at all — every call to it
+goes over HTTP to a local `openbb-api`.
+
+That last point matters for OpenBB's AGPL-3.0 licensing: it covers the platform you run locally,
+not this client. Deploying the whole stack as a public network service is a different question, so
+check the upstream `LICENSE` (OpenBB has announced a move to a permissive license) before doing
+that. Running it locally, as documented above, is not affected.
