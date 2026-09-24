@@ -76,10 +76,26 @@ def last_complete_session():
     return now.date() if now.time() >= MARKET_CLOSE else now.date() - timedelta(days=1)
 
 
+def complete_sessions(df: pd.DataFrame, n_tickers: int) -> pd.DataFrame:
+    """Keep only dates where every basket member has a usable bar.
+
+    yfinance sometimes publishes a session for part of a basket (2026-09-22 had 11 of the DOW 30) or
+    a bar with close: null. FeatureEngineer.clean_data reacts by dropping every *ticker* with a gap,
+    which silently shrinks the basket until the observation no longer fits the model. Dropping the
+    incomplete *session* instead costs one day of the 60-day replay and keeps all 30 columns."""
+    df = df[df["close"].notna()]
+    per_date = df.groupby("date")["tic"].nunique()
+    return df[df["date"].isin(per_date[per_date == n_tickers].index)]
+
+
 def build_window(tickers, as_of: date):
     start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
     df = fetch_prices(tickers, start).rename(columns={"symbol": "tic"})
     df = df[df["date"] <= as_of.isoformat()]
+    before = df["date"].nunique()
+    df = complete_sessions(df, len(tickers))
+    if (dropped := before - df["date"].nunique()):
+        print(f"finrl_signal: dropped {dropped} incomplete session(s) before {as_of}")
     df["day"] = pd.to_datetime(df["date"]).dt.dayofweek
     df = df[["date", "open", "high", "low", "close", "volume", "tic", "day"]]
     # use_vix=False: FeatureEngineer.add_vix would call yfinance directly; we take ^VIX from openbb-api instead
@@ -88,6 +104,9 @@ def build_window(tickers, as_of: date):
     vix = fetch_prices(["^VIX"], start)[["date", "close"]].rename(columns={"close": "vix"})
     df = df.merge(vix, on="date")
 
+    if (got := df["tic"].nunique()) != len(tickers):
+        raise HTTPException(503, f"only {got} of {len(tickers)} basket tickers survived preprocessing; "
+                                 f"the price data is incomplete right now")
     dates = sorted(df["date"].unique())
     window = df[df["date"] >= dates[-EPISODE_DAYS]].sort_values(["date", "tic"]).reset_index(drop=True)
     window.index = window["date"].factorize()[0]

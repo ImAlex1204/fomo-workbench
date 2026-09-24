@@ -59,7 +59,7 @@ export default function FinrlSignals({ signals, error, lang, s }: { signals: Sig
         </table>
       )}
       {shown && <p className="mt-2 text-[11px] leading-snug text-ink-3">{lang === 'zh' ? shown.note_zh : shown.note_en}</p>}
-      <p className="mt-2 text-[11px] text-ink-3">{s.disclaimer}</p>
+      <p className="mt-2 text-[11px] leading-snug text-ink-3">{s.basketCaveat} {s.disclaimer}</p>
     </div>
   )
 }

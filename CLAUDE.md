@@ -100,7 +100,8 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 資料要用 `adjustment=splits_and_dividends`（與訓練資料一致），跟 K 線圖的未還原價只有最新一天相同。
 - `shares` = 模型今天的**原始意圖**（`predict × hmax`，未被現金／持股裁切），`position` = 從現金起算模擬 `EPISODE_DAYS=60` 天後的持股。agent 幾乎都在 episode 開頭建倉後長抱，所以單看「今天的 action」多半是 0；改 `EPISODE_DAYS` 會改變訊號。沒有呼叫上游 `DRL_prediction`（跑完 VecEnv 會 reset、持倉消失），自己寫了 8 行迴圈。
 - 每列另有 `equity`（該 agent 60 天模擬的**整個籃子**總資產，60 個點，同一 agent 每檔相同）與 `return_pct`；UI 的「60 日模擬」欄畫成 sparkline，用來判斷五個 agent 近期誰比較可信（2026-09-21 加）。
-- **訓練資料的隱形陷阱（Phase 17 實測）**：上游 `FeatureEngineer.clean_data` 會把 close 樞紐成 date×tic 後 `dropna(axis=1)`，**任何在窗口內有缺日的成分股會被整檔刪掉、不報錯**——用 2014 起點訓練 tech30 會 30 檔進、28 檔出（CRWD、UBER 消失），你還以為訓練了 30 檔。`train_basket.py` 因此把「有成分股被刪」與「網格有缺格」都改成硬錯誤。（script 1 後面那個 `fillna(0)` 作用在已清洗的資料上，實際是空操作，不是這個問題的來源。）
+- **`clean_data` 的隱形陷阱，訓練與推論都會中（Phase 17 實測）**：上游 `FeatureEngineer.clean_data` 會把 close 樞紐成 date×tic 後 `dropna(axis=1)`，**任何在窗口內有缺日的成分股會被整檔刪掉、不報錯**——用 2014 起點訓練 tech30 會 30 檔進、28 檔出（CRWD、UBER 消失），你還以為訓練了 30 檔。`train_basket.py` 因此把「有成分股被刪」與「網格有缺格」都改成硬錯誤。（script 1 後面那個 `fillna(0)` 作用在已清洗的資料上，實際是空操作，不是這個問題的來源。）
+- **推論端同一個陷阱（2026-09-24 實際發生）**：yfinance 會發布「只有部分成分股」的交易日（09-22 那天道瓊 30 只有 11 檔有資料），`clean_data` 於是刪掉其餘 19 檔 → `state_space` 變 111 → 模型報 `Unexpected observation shape`、端點 500。`build_window` 現在先用 `complete_sessions()` **丟掉不完整的「交易日」而不是不完整的「成分股」**（60 天回放少一天影響很小，少 19 欄則直接壞掉），並在 30 檔沒湊齊時回 503。`close` 是 null 的列也在這裡一併濾掉。
 - 所有籃子都是 `total_timesteps=20000`、**單一種子、單次訓練、無驗證集**：籃子之間的差異只能說明「這幾次訓練跑出來的結果」，不能當成「科技股籃比道瓊籃好／壞」的結論。這句話要留在 UI 與 README 裡。
 - 每個交易日第一次呼叫約 4 秒，之後快取 6 ms。
 
@@ -120,7 +121,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
 
 **UI**
-- FinRL 面板（`FinrlSignals.tsx`）有籃子切換鈕（短標籤 `DOW·14` / `DOW·19` / `TECH·19`，全名與說明在 tooltip），選擇存 `localStorage.basket` 且跨代號沿用，該代號沒有該籃時退回第一個；籃子的說明文字顯示在表格下方。
+- FinRL 面板（`FinrlSignals.tsx`）有籃子切換鈕（短標籤 `DOW·14` / `DOW·19` / `TECH·19`，全名與說明在 tooltip），選擇存 `localStorage.basket` 且跨代號沿用，該代號沒有該籃時退回第一個。表格下方兩行灰字：該籃的 `note`（**`baskets.json` 的 note 是給 UI 看的，維持一句話；完整理由寫在 README／本檔，不要塞回設定檔**）＋ 固定的訓練限制警語（`basketCaveat`）＋ 免責聲明。改了 `baskets.json` 要重啟 backend（note 在 import 時讀入）。
 - 六個分頁與市場總覽都**保持掛載、用 `hidden` 切換**（不是條件渲染），聊天紀錄與圖才不會消失；個股面板在第一次開啟某檔後才掛載（`stockOpened`）。
 - Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，每張圖都有 `ResizeObserver → fitContent()`。切換區間時 bars 與它所屬的 `ticker:range` key 要放在**同一個 state**，並用 `alive` 旗標丟掉過期 fetch。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。

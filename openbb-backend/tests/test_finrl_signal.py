@@ -2,9 +2,11 @@
 Importing widgets.finrl_signal loads the five trained agents from finrl-work/ (a few seconds)."""
 from datetime import datetime, date
 
+import pandas as pd
 import pytest
 
 from widgets import finrl_signal
+from widgets.finrl_signal import complete_sessions
 
 
 class _FixedNow:
@@ -38,3 +40,24 @@ def test_baskets_are_configured_and_frozen():
     for b in finrl_signal.BASKETS:
         assert len(b["tickers"]) == len(set(b["tickers"])) == 30
         assert len(b["models"]) == 5
+
+
+def _bars(rows):
+    return pd.DataFrame([{"date": d, "tic": t, "close": c} for d, t, c in rows])
+
+
+def test_complete_sessions_drops_a_partial_day_not_the_tickers():
+    """The 2026-09-22 case: one session carried 11 of 30 tickers, and clean_data would have
+    dropped the other 19 tickers outright, shrinking the observation below the model's."""
+    df = _bars([("2026-09-21", t, 10.0) for t in "ABC"] +
+               [("2026-09-22", "A", 11.0)] +  # partial session
+               [("2026-09-23", t, 12.0) for t in "ABC"])
+    out = complete_sessions(df, 3)
+    assert sorted(out["date"].unique()) == ["2026-09-21", "2026-09-23"]
+    assert sorted(out["tic"].unique()) == ["A", "B", "C"]
+
+
+def test_complete_sessions_treats_a_null_close_as_missing():
+    df = _bars([("2026-09-21", t, 10.0) for t in "AB"] +
+               [("2026-09-22", "A", 11.0), ("2026-09-22", "B", None)])
+    assert list(complete_sessions(df, 2)["date"].unique()) == ["2026-09-21"]
