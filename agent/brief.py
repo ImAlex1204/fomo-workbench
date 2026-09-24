@@ -97,8 +97,9 @@ async def _summarize(items: list[dict]) -> dict | None:
                 model=model, contents=SUMMARY_PROMPT + json.dumps(data, ensure_ascii=False),
                 config=types.GenerateContentConfig(response_mime_type="application/json"))
             return json.loads(resp.text)
-        except Exception:
-            if wait is None:
+        except Exception as e:
+            # a daily-quota 429 will not clear by waiting, and retrying it burns the rest of the quota
+            if wait is None or "PerDay" in str(e):
                 return None
             await asyncio.sleep(wait)
 
