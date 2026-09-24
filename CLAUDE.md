@@ -67,7 +67,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
 - `training/train_basket.py`：依 `baskets.json` 訓練一組籃子的 5 個 agent（`cd training && ../envs/finrl/bin/python train_basket.py tech30`，約 10–20 分鐘）
-- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
+- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
 
@@ -117,6 +117,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 **每日簡報（`agent/brief.py`，2026-09-21）**
 - 排程規則只有一條：每分鐘檢查，`last_complete_session()` 是平日且該日期沒有**完成的**簡報（檔案不存在或 `generated_at` 為 null）就跑。這同時涵蓋收盤後自動跑（ET 16:00 key 切到今天）與機器關機後的補跑；**agent 一啟動如果當天還沒跑就會立刻開始**（8 檔約 12 分鐘，與聊天共用 `_lock`，聊天的 FinGPT 呼叫會排在當前那檔之後）。
 - 每檔 FinRL（秒）+ FinGPT（1.5 分）逐檔存檔（進度給 UI），跑完**一次** Gemini 呼叫（`response_mime_type=application/json`）產生 EN／繁中的 overview + 每檔一句；Gemini 失敗時 `summary` 為 null，引擎輸出仍在，UI 只是少了摘要文字（不會壞）。
+- Gemini 當掉或額度用完時簡報會存成 `summary: null`（引擎資料完整）。事後補：`cd agent && ../envs/fingpt/bin/python resummarize.py`（不帶參數 = 補所有缺摘要的；可指定日期），每份一次呼叫、第一次失敗就停。
 - **不要在 `_summarize` 外面再包重試**：它內部已經退避重試 3 次，外層再跑 N 輪就是 3N 次呼叫，一天 20 次的額度幾分鐘就沒了（2026-09-24 實際踩到）。它與 `loop.py` 一樣，遇到含 `PerDay` 的 429 直接放棄。
 - 測試時**不要**讓臨時 agent 寫到 `agent/briefs/`（正式排程會以為當天做完）；把 `brief.BRIEF_DIR`／`WATCHLIST_FILE` 指到 scratchpad，並把 `brief.scheduler` 換成空迴圈（做法見 git log 的 brief commit）。
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
