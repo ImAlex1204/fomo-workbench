@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Bar, Quote, Tick } from '../api'
 import type { Lang, Strings } from '../i18n'
 
 export default function TopBar({ ticker, quote, bars, tick, lang, s, online, view, onTicker, onHome, onLang }:
   { ticker: string; quote: Quote | null; bars: Bar[]; tick: Tick | null; lang: Lang; s: Strings; online: number; view: 'market' | 'stock'; onTicker: (t: string) => void; onHome: () => void; onLang: (l: Lang) => void }) {
   const [draft, setDraft] = useState(ticker)
+  const box = useRef<HTMLInputElement>(null)
   useEffect(() => setDraft(ticker), [ticker])  // ticker can also change from the heatmap / movers
   // Price/change come from the daily bars: the yfinance quote endpoint returns last_price/prev_close only intermittently.
   // With a live tick, use its price and Yahoo's change vs. previous regular close (covers pre/post-market too).
@@ -16,8 +17,11 @@ export default function TopBar({ ticker, quote, bars, tick, lang, s, online, vie
     <header className="flex flex-wrap items-center gap-4 px-5 py-3">
       <button onClick={onHome} className="text-base font-bold tracking-tight hover:text-accent" title={s.backToMarket}>{s.title}</button>
       {view === 'stock' && <button onClick={onHome} className="text-xs text-ink-3 hover:text-ink-2">← {s.backToMarket}</button>}
-      <form onSubmit={e => { e.preventDefault(); onTicker(draft.trim().toUpperCase()) }}>
-        <input value={draft} onChange={e => setDraft(e.target.value)} aria-label={s.ticker}
+      {/* The box always holds a ticker, so typing should replace it: select on focus, and again after
+          submitting, since focus stays here and the next keystrokes would otherwise append. */}
+      <form onSubmit={e => { e.preventDefault(); onTicker(draft.trim().toUpperCase()); box.current?.select() }}>
+        <input ref={box} value={draft} onChange={e => setDraft(e.target.value)} aria-label={s.ticker}
+          onFocus={e => e.currentTarget.select()}
           className="num w-28 rounded-lg border border-line bg-panel px-3 py-1.5 text-sm uppercase outline-none focus:border-accent" />
       </form>
       {view === 'stock' && last != null && (

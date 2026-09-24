@@ -125,6 +125,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - FinRL 面板（`FinrlSignals.tsx`）有籃子切換鈕（短標籤 `DOW·14` / `DOW·19` / `TECH·19`，全名與說明在 tooltip），選擇存 `localStorage.basket` 且跨代號沿用，該代號沒有該籃時退回第一個。表格下方兩行灰字：該籃的 `note`（**`baskets.json` 的 note 是給 UI 看的，維持一句話；完整理由寫在 README／本檔，不要塞回設定檔**）＋ 固定的訓練限制警語（`basketCaveat`）＋ 免責聲明。改了 `baskets.json` 要重啟 backend（note 在 import 時讀入）。
 - 六個分頁與市場總覽都**保持掛載、用 `hidden` 切換**（不是條件渲染），聊天紀錄與圖才不會消失；個股面板在第一次開啟某檔後才掛載（`stockOpened`）。
 - Lightweight Charts 在 `display:none` 容器裡建立時 `fitContent` 算到寬度 0，每張圖都有 `ResizeObserver → fitContent()`。切換區間時 bars 與它所屬的 `ticker:range` key 要放在**同一個 state**，並用 `alive` 旗標丟掉過期 fetch。
+- 頂欄的代號輸入框永遠帶著現在的代號，所以打字應該是**取代**而不是插入：`onFocus` 全選，送出後再全選一次（焦點會留在框內，不然下一次打字會接在後面變成 `AAPLAAPL`）。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。
 - 首頁第一張卡是每日簡報（`market/DailyBrief.tsx`），每 30 秒輪詢 `/brief`，watchlist 增刪直接 `PUT /watchlist`；`Market` 多接一個 `lang` prop 以選摘要語言。
 - 聊天面板有兩顆快捷鈕：「FinGPT → 代號」與「FinRL × FinGPT → 代號」（後者送出比較問題，讓模型同時呼叫兩個工具並指出分歧）。回答用 `react-markdown` + `remark-gfm` 渲染（模型比較五個 agent 時會出表格，沒有 gfm 會變成一串 `|`）。
