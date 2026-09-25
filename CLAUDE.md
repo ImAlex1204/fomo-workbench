@@ -85,6 +85,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - `yfinance` 釘 **0.2.66**：1.x 拿掉 `proxy` 參數會弄壞 FinRL 的 `YahooDownloader`（守則 #4 不改上游）；0.2.58 的財報資料停在 2025-05。`pip install -e FinRL` 帶依賴會把它降回 0.2.58，所以要 `--no-deps`。
 - finviz provider（screener／sector groups）是同步阻塞、約 10 秒，會卡住整個 openbb-api——這是 6900 開 **3 個 worker** 的原因（`openbb-api` 啟動器的 `--workers` 有 bug，要直接起 uvicorn）。
 - yfinance 偶爾會回傳「有 open/high/low/volume 但 `close` 是 `null`」的 K 棒（2026-09-23 實際遇到，那天的 09-22 就是這樣；帶 `adjustment=splits_and_dividends` 的查詢則是整根消失）。`api.ts` 的 `fetchHistory` 會過濾掉 `close == null` 的棒——在源頭擋掉，否則 TopBar 的 `last.toFixed()` 會讓整棵 React 樹崩成空白頁。
+- 歷史價格也會被併發擠掉：一次 FinGPT 呼叫自己就打 4 個 openbb-api 請求，同時開個股頁會讓 `fetchHistory` 失敗、K 線**永久空白且不顯示錯誤**（2026-09-25 實際遇到，同時頂欄的公司名也消失）。`fetchHistory` 因此失敗或回空陣列時會等 1.5 秒重試一次。
 - 頁面同時打多個 yfinance 請求時，`equity/profile`／`fundamental/metrics`／`share_statistics` 偶爾回缺欄位的結果；`api.ts` 的 `firstResult()` 關鍵欄位缺就等 1.5 秒重抓一次。`equity/price/quote` 欄位每次不一致，只拿公司名稱，價格一律由日 K 算。
 - 欄位語意：`dividend_yield` **已是百分比**；yfinance metrics 沒有 EPS，EPS TTM = 近四季 `diluted_earnings_per_share` 加總；`capital_expenditure` 是負數（FCF = OCF + capex）；年報 `limit=5` 實際只有 4 年完整；`ownership/share_statistics` 的 `short_percent_of_float` 是小數；13F 的 `pct_held`／`pct_change` 是小數；finviz `Change %` 是小數。
 - FINRA `darkpool/otc` 的 `update_date` 是**發布日**（openbb 丟掉了 `weekStartDate`）；T1 ATS 的資料週 = 發布日往前 21 天所在週的週一。
@@ -118,6 +119,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 排程規則只有一條：每分鐘檢查，`last_complete_session()` 是平日且該日期沒有**完成的**簡報（檔案不存在或 `generated_at` 為 null）就跑。這同時涵蓋收盤後自動跑（ET 16:00 key 切到今天）與機器關機後的補跑；**agent 一啟動如果當天還沒跑就會立刻開始**（8 檔約 12 分鐘，與聊天共用 `_lock`，聊天的 FinGPT 呼叫會排在當前那檔之後）。
 - 每檔 FinRL（秒）+ FinGPT（1.5 分）逐檔存檔（進度給 UI），跑完**一次** Gemini 呼叫（`response_mime_type=application/json`）產生 EN／繁中的 overview + 每檔一句；Gemini 失敗時 `summary` 為 null，引擎輸出仍在，UI 只是少了摘要文字（不會壞）。
 - Gemini 當掉或額度用完時簡報會存成 `summary: null`（引擎資料完整）。事後補：`cd agent && ../envs/fingpt/bin/python resummarize.py`（不帶參數 = 補所有缺摘要的；可指定日期），每份一次呼叫、第一次失敗就停。
+- 摘要 prompt 會把每檔 FinGPT 全文帶進去，15 檔就 30k+ 字元，免費層對大請求常回 503（2026-09-25 實測 16k 反覆失敗、7k 成功過）。`_summary_input()` 因此把分析文字總量壓在 `ANALYSIS_BUDGET=4500` 字元內（每檔至少 300），`prediction` 不裁。**注意：這個上限尚未在一次成功的呼叫上驗證過**（當天額度用盡）。
 - **不要在 `_summarize` 外面再包重試**：它內部已經退避重試 3 次，外層再跑 N 輪就是 3N 次呼叫，一天 20 次的額度幾分鐘就沒了（2026-09-24 實際踩到）。它與 `loop.py` 一樣，遇到含 `PerDay` 的 429 直接放棄。
 - 測試時**不要**讓臨時 agent 寫到 `agent/briefs/`（正式排程會以為當天做完）；把 `brief.BRIEF_DIR`／`WATCHLIST_FILE` 指到 scratchpad，並把 `brief.scheduler` 換成空迴圈（做法見 git log 的 brief commit）。
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。

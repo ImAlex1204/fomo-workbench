@@ -41,6 +41,8 @@ Model outputs are opinions, not advice; do not add disclaimers, the UI shows one
 DATA:
 """
 
+ANALYSIS_BUDGET = 4500  # chars of FinGPT prose the summary prompt may carry in total (see _summary_input)
+
 _state: dict = {"running": False, "progress": None}  # progress = [done, total] while running
 
 
@@ -86,9 +88,20 @@ def _finrl_tallies(finrl):
     return out
 
 
-async def _summarize(items: list[dict]) -> dict | None:
-    data = [{"ticker": i["ticker"], "fingpt": i["fingpt"] and {"prediction": i["fingpt"]["prediction"], "analysis": i["fingpt"]["analysis"]},
+def _summary_input(items: list[dict]) -> list[dict]:
+    """Per-ticker digest for the summary prompt, with the FinGPT prose share-capped.
+
+    The full reports are ~2k chars each, so a 15-ticker watchlist would post 30k+ and the free tier
+    returns 503 on requests that large (a 16k one failed repeatedly on 2026-09-25). The summary only
+    needs the gist: `prediction` is passed whole, and the analysis is cut to a share of the budget."""
+    per = max(300, ANALYSIS_BUDGET // max(1, len(items)))
+    return [{"ticker": i["ticker"],
+             "fingpt": i["fingpt"] and {"prediction": i["fingpt"]["prediction"], "analysis": i["fingpt"]["analysis"][:per]},
              "finrl": _finrl_tallies(i["finrl"])} for i in items]
+
+
+async def _summarize(items: list[dict]) -> dict | None:
+    data = _summary_input(items)
     client = genai.Client()
     model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
     for wait in (5, 30, None):

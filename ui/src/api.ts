@@ -39,10 +39,20 @@ export const RANGES: Record<Range, { interval: string; days: number; intraday?: 
 export async function fetchHistory(ticker: string, range: Range = '1Y'): Promise<Bar[]> {
   const { interval, days } = RANGES[range]
   const start = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10)
-  const d = await json<{ results: Bar[] }>(`${OPENBB}/api/v1/equity/price/historical?symbol=${ticker}&provider=yfinance&start_date=${start}&interval=${interval}`)
+  const url = `${OPENBB}/api/v1/equity/price/historical?symbol=${ticker}&provider=yfinance&start_date=${start}&interval=${interval}`
+  // openbb-api's yfinance provider drops requests when several land at once (a FinGPT run fires four
+  // of its own), and a failed history fetch leaves the chart blank for good, so try once more.
+  let results: Bar[]
+  try {
+    results = (await json<{ results: Bar[] }>(url)).results
+    if (!results?.length) throw new Error('empty')
+  } catch {
+    await new Promise(r => setTimeout(r, 1500))
+    results = (await json<{ results: Bar[] }>(url)).results
+  }
   // yfinance sometimes returns a session with open/high/low/volume but close: null (seen 2026-09-22).
   // A bar with no close is unusable for every consumer — chart, indicators, top-bar price — so drop it here.
-  const bars = d.results.filter(b => b.close != null)
+  const bars = results.filter(b => b.close != null)
   if (range === '1D' && bars.length) {  // last trading session only
     const day = bars[bars.length - 1].date.slice(0, 10)
     return bars.filter(b => b.date.startsWith(day))

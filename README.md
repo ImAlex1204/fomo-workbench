@@ -15,7 +15,7 @@ Built as a pre-MSc FinTech portfolio project.
 
 ![Market overview](docs/market-overview.png)
 
-![AAPL — price, the five FinRL agents of the selected model basket, and the agent panel](docs/stock-ai.png)
+![AAPL — price, the selected basket's five FinRL agents, and the assistant comparing those signals with FinGPT's outlook](docs/stock-ai.png)
 
 ## What it shows
 

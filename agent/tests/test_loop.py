@@ -70,3 +70,22 @@ def test_finrl_tallies_counts_each_basket():
 def test_finrl_tallies_passes_errors_and_none_through():
     assert brief._finrl_tallies({"error": "XOM is in no FinRL model basket"}) == "XOM is in no FinRL model basket"
     assert brief._finrl_tallies(None) is None
+
+
+def test_summary_input_caps_the_fingpt_prose():
+    items = [{"ticker": f"T{n}", "fingpt": {"prediction": "Up by 1-2%", "analysis": "x" * 3000}, "finrl": None}
+             for n in range(15)]
+    data = brief._summary_input(items)
+    assert len(data) == 15
+    assert all(len(d["fingpt"]["analysis"]) == 300 for d in data)      # floor, not budget/15
+    assert all(d["fingpt"]["prediction"] == "Up by 1-2%" for d in data)  # the prediction is never cut
+    assert sum(len(d["fingpt"]["analysis"]) for d in data) <= 15 * 300
+
+
+def test_summary_input_leaves_short_reports_alone():
+    items = [{"ticker": "AAPL", "fingpt": {"prediction": "Down by 0-1%", "analysis": "short report"}, "finrl": None}]
+    assert brief._summary_input(items)[0]["fingpt"]["analysis"] == "short report"
+
+
+def test_summary_input_handles_a_missing_forecast():
+    assert brief._summary_input([{"ticker": "X", "fingpt": None, "finrl": None}])[0]["fingpt"] is None
