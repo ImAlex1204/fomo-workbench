@@ -121,7 +121,9 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 排程規則只有一條：每分鐘檢查，`last_complete_session()` 是平日且該日期沒有**完成的**簡報（檔案不存在或 `generated_at` 為 null）就跑。這同時涵蓋收盤後自動跑（ET 16:00 key 切到今天）與機器關機後的補跑；**agent 一啟動如果當天還沒跑就會立刻開始**（8 檔約 12 分鐘，與聊天共用 `_lock`，聊天的 FinGPT 呼叫會排在當前那檔之後）。
 - 每檔 FinRL（秒）+ FinGPT（1.5 分）逐檔存檔（進度給 UI），跑完**一次** Gemini 呼叫（`response_mime_type=application/json`）產生 EN／繁中的 overview + 每檔一句；Gemini 失敗時 `summary` 為 null，引擎輸出仍在，UI 只是少了摘要文字（不會壞）。
 - Gemini 當掉或額度用完時簡報會存成 `summary: null`（引擎資料完整）。事後補：`cd agent && ../envs/fingpt/bin/python resummarize.py`（不帶參數 = 補所有缺摘要的；可指定日期），每份一次呼叫、第一次失敗就停。
-- 摘要 prompt 會把每檔 FinGPT 全文帶進去，15 檔就 30k+ 字元，免費層對大請求常回 503（2026-09-25 實測 16k 反覆失敗、7k 成功過）。`_summary_input()` 因此把分析文字總量壓在 `ANALYSIS_BUDGET=4500` 字元內（每檔至少 300），`prediction` 不裁。**注意：這個上限尚未在一次成功的呼叫上驗證過**（當天額度用盡）。
+- **`gemini-3.6-flash` 的 503 是間歇性的，跟 payload 大小無關**。我在 2026-09-25 曾推論「大請求才會 503」，2026-10-08 的實測推翻了它：同一分鐘內「極小的 JSON 模式請求」503、「3k 的 JSON 模式請求」成功，而先前失敗的 6.8k 請求重試第 3 次就過了。**正確的應對是重試，不是縮小 prompt。**
+- `_summary_input()` 仍把分析文字總量壓在 `ANALYSIS_BUDGET=4500` 字元內（每檔至少 300，`prediction` 不裁）——保留的理由是「避免 prompt 隨 watchlist 線性膨脹」（15 檔原本會到 30k+），**不是**為了解決 503。
+- 夜間簡報的摘要失敗時，**直接重跑 `resummarize.py` 就好**（`_summarize` 內部已退避重試 3 次，一次執行最多 3 次呼叫）。間歇性 503 多試幾輪就會過。
 - **不要在 `_summarize` 外面再包重試**：它內部已經退避重試 3 次，外層再跑 N 輪就是 3N 次呼叫，一天 20 次的額度幾分鐘就沒了（2026-09-24 實際踩到）。它與 `loop.py` 一樣，遇到含 `PerDay` 的 429 直接放棄。
 - 測試時**不要**讓臨時 agent 寫到 `agent/briefs/`（正式排程會以為當天做完）；把 `brief.BRIEF_DIR`／`WATCHLIST_FILE` 指到 scratchpad，並把 `brief.scheduler` 換成空迴圈（做法見 git log 的 brief commit）。
 - 非 DOW 30 的代號允許進 watchlist：FinGPT 照跑，FinRL 那欄記 error、UI 顯示 `—`。上限 15 檔。
