@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react'
-import { fetchBrief, fetchWatchlist, runBrief, saveWatchlist, type BriefItem, type BriefStatus } from '../../api'
+import { fetchBrief, fetchWatchlist, runBrief, saveWatchlist, type BriefStatus } from '../../api'
 import type { Lang, Strings } from '../../i18n'
-
-const dir = (p: string | null | undefined) => /down/i.test(p ?? '') ? 'down' : /up/i.test(p ?? '') ? 'up' : 'flat'
-/** BUY/SELL counts of the first basket, plus a per-basket breakdown for the tooltip. */
-const tally = (item: BriefItem) => {
-  const baskets = item.finrl?.baskets
-  if (!baskets?.length) return null
-  const count = (b: typeof baskets[number]) => ({
-    buy: b.signals.filter(x => x.action === 'BUY').length,
-    sell: b.signals.filter(x => x.action === 'SELL').length,
-  })
-  const all = baskets.map(b => ({ label: b.basket, ...count(b) }))
-  return { ...all[0], detail: all.map(a => `${a.label}: ${a.buy}B / ${a.sell}S`).join('\n') }
-}
+import { covered, dir, failures, tally } from './brief'
 
 export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strings; onSelect: (symbol: string) => void }) {
   const [st, setSt] = useState<BriefStatus | null>(null)
@@ -34,6 +22,7 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
   const brief = st?.brief ?? null
   const summary = brief?.summary?.[lang] ?? brief?.summary?.en ?? null
   const items = new Map((brief?.items ?? []).map(i => [i.ticker, i]))
+  const fail = brief?.items?.length ? failures(brief.items) : null
 
   return (
     <section className="panel p-4">
@@ -47,6 +36,12 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
         </div>
       </div>
       {!st ? <p className="text-sm text-ink-3">…</p> : !brief && !st.running ? <p className="text-sm text-ink-3">{s.briefNone}</p> : null}
+      {fail && (fail.fingpt > 0 || fail.finrl > 0) && (
+        <p className="mb-3 rounded-md border border-down/40 bg-down/10 px-2 py-1.5 text-xs text-down" title={fail.first}>
+          {[fail.fingpt && `${s.briefFailFingpt} ${fail.fingpt}/${fail.total}`, fail.finrl && `${s.briefFailFinrl} ${fail.finrl}/${fail.total}`].filter(Boolean).join(' · ')}
+          <span className="ml-2 text-ink-3">{s.briefFailHint}</span>
+        </p>
+      )}
       {summary && <p className="mb-3 text-sm leading-relaxed text-ink">{summary.overview}</p>}
       <ul className="divide-y divide-line/60">
         {watch.map(t => {
@@ -57,11 +52,13 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
           return (
             <li key={t} className="flex items-center gap-3 py-1.5 text-sm">
               <button onClick={() => onSelect(t)} className="num w-14 shrink-0 text-left font-semibold text-ink hover:text-accent">{t}</button>
-              <span className={`num w-28 shrink-0 text-xs ${d === 'up' ? 'text-up' : d === 'down' ? 'text-down' : 'text-ink-3'}`} title={it?.fingpt?.analysis}>
-                {it ? (p ?? (it.error ? '—' : '…')) : s.briefNext}
+              <span className={`num w-28 shrink-0 text-xs ${d === 'up' ? 'text-up' : d === 'down' ? 'text-down' : it?.error ? 'text-down/70' : 'text-ink-3'}`}
+                title={it?.fingpt?.analysis ?? it?.error ?? undefined}>
+                {it ? (p ?? (it.error ? '✕' : '…')) : s.briefNext}
               </span>
-              <span className="num w-20 shrink-0 text-xs text-ink-3" title={it?.finrl?.error ?? tl?.detail}>
-                {tl ? <><span className="text-up">{tl.buy}B</span> / <span className="text-down">{tl.sell}S</span></> : it?.finrl?.error ? '—' : ''}
+              <span className={`num w-20 shrink-0 text-xs ${it && it.finrl?.error && !covered(it) ? 'text-down/70' : 'text-ink-3'}`} title={it?.finrl?.error ?? tl?.detail}>
+                {tl ? <><span className="text-up">{tl.buy}B</span> / <span className="text-down">{tl.sell}S</span></>
+                  : it && covered(it) ? '—' : it?.finrl?.error ? '✕' : ''}
               </span>
               <span className="min-w-0 flex-1 truncate text-ink-2" title={summary?.tickers[t]}>{summary?.tickers[t] ?? ''}</span>
               <button onClick={() => save(watch.filter(x => x !== t))} className="shrink-0 px-1 text-ink-3 hover:text-down" title="remove">×</button>

@@ -286,7 +286,7 @@ export type BriefSignal = { agent: string; action: 'BUY' | 'SELL' | 'HOLD'; shar
 export type BriefBasket = { basket: string; trained_on: string; as_of: string; close: number; signals: BriefSignal[] }
 export type BriefItem = {
   ticker: string
-  finrl: { baskets?: BriefBasket[]; error?: string } | null
+  finrl: { baskets?: BriefBasket[]; error?: string; not_covered?: boolean } | null
   fingpt: { prediction: string | null; analysis: string } | null
   error: string | null
 }

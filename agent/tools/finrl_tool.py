@@ -24,8 +24,8 @@ def signal(ticker: str) -> dict:
     independent and often disagree; report each one, do not invent a consensus. Tickers in no basket
     return an error. Not investment advice."""
     r = requests.get(f"{BACKEND}/finrl/signal/{ticker.upper()}", timeout=120)
-    if r.status_code == 404:
-        return {"error": r.json().get("detail", f"{ticker.upper()} is in no FinRL model basket")}
+    if r.status_code == 404:  # not_covered: expected for non-members, so the UI greys it out instead of flagging it
+        return {"error": r.json().get("detail", f"{ticker.upper()} is in no FinRL model basket"), "not_covered": True}
     r.raise_for_status()
     d = r.json()
     return {"ticker": d["ticker"], "baskets": [
