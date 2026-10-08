@@ -45,9 +45,9 @@
 4. **不要**把 OpenBB / FinRL / FinGPT 的原始碼 fork 下來修改內部邏輯——一律當成透過 `pip install` / `git clone` 取得的**依賴套件**使用，這樣才能持續吃到上游社群的維護與更新（細節見「延伸與維護原則」一節）。
 5. **不要**因為 Workspace 現況不確定就倒退去拉 OpenTerminalUI/BLMTRM 進來，理由見上方「近況更新」第 2 點。
 
-## 目前狀態（2026-09-21）
+## 目前狀態（2026-10-08）
 
-Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`；給人看的英文說明在 `README.md`（含截圖）。
+Phase 1–17 全部完成。Phase 1–16 的逐步決策紀錄在 `docs/phases.md`；Phase 17（FinRL 三個模型籃）與 10 月的幾次修復只記在本檔的「已知的坑」與 git log 裡。給人看的英文說明在 `README.md`（含截圖）。
 
 **四個服務**（日常用 ODP Desktop 的 Backends 畫面啟動，順序 API → MCP → backend → agent；Claude Code session 用 `.claude/launch.json`，同一組指令）：
 
@@ -62,12 +62,12 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 改 `openbb-backend/` 或 `agent/` → 在 ODP Desktop 把該服務 **Stop → Start**（沒有 auto-reload）。agent 重啟後第一次 FinGPT 呼叫多 8 秒載模型。
 - 改 `ui/` → `cd ui && npm run build`（8001 直接 serve 新的 `ui/dist`）。開發時 `npm run dev`（5173）打同一組後端。
 - 改了 venv 的套件 → `uv pip freeze` 更新 `requirements/<env>.lock.txt`（安裝時用 `--no-deps`，見 README）。
-- **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了 `applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`_gemini_schema`／`last_complete_session` 要跑；純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
+- **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了這些純函式要跑：`applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`market/brief.ts`（`failures`／`covered`／`weekdaysBehind`）／`widgets/news.py` 的 `to_items`／`finrl_signal.py` 的 `complete_sessions`／`brief.py` 的 `_finrl_tallies`／`_summary_input`／`tools/http.py`／`_gemini_schema`／`last_complete_session`。純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
 
-**程式碼位置**（自寫的膠水層約 2.5k 行）：
+**程式碼位置**（自寫的膠水層約 3.3k 行，另有 440 行測試）：
 - `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote,news}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
 - `training/train_basket.py`：依 `baskets.json` 訓練一組籃子的 5 個 agent（`cd training && ../envs/finrl/bin/python train_basket.py tech30`，約 10–20 分鐘）
-- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
+- `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`tools/{fingpt_tool,finrl_tool,http}.py`（`http.py` 是對本機服務 GET 的共用重試層）；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
 - gitignore 的：`FinRL/`、`FinGPT/`（上游 clone，當依賴用）、`envs/`、`finrl-work/`（訓練好的 5 個模型）
 

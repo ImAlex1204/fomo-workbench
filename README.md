@@ -123,7 +123,8 @@ investing. The UI says so on the panel.
 ### Decisions worth knowing
 
 - **Upstream projects are dependencies, not forks.** OpenBB, FinRL and FinGPT are installed
-  or cloned unmodified; all glue lives in `openbb-backend/`, `agent/` and `ui/` (~2.5k lines).
+  or cloned unmodified; all glue lives in `openbb-backend/`, `agent/`, `ui/` and `training/`
+  (~3.3k lines, plus ~440 of tests).
   Upgrading is `pip install --upgrade` / `git pull`, and versions are pinned in `requirements/`.
 - **Own dashboard instead of OpenBB Workspace.** OpenBB Inc. announced its wind-down in
   August 2026 and Workspace registration is closed; the open-source data platform is unaffected.
@@ -141,6 +142,9 @@ investing. The UI says so on the panel.
 - FinRL agents only know the 30 stocks in their basket; a ticker in none of the three gets a 404
   on that panel. FinGPT still answers for it, though it is fine-tuned on the DOW 30.
 - FinGPT is fine-tuned on the DOW 30 too, samples stochastically, and takes 60–90 s per call.
+- Its prompt lists news headlines without summaries: Yahoo stopped serving the endpoint that
+  carried the article text, so there is less for the model to reason over than there was in
+  September.
 - Free data: daily/delayed for most panels; the tick stream uses Yahoo's unofficial WebSocket
   and silently falls back to 60 s polling if it breaks. FINRA dark-pool data lags ~2 weeks.
 - The sector RRG is a public approximation of the proprietary JdK calculation.
@@ -216,7 +220,8 @@ FinRL/ FinGPT/ envs/ finrl-work/   git-ignored: upstream clones, venvs, trained 
 ## Versions
 
 OpenBB 4.7.2 · FinRL `2334a5f` (2026-07) · FinGPT `cefb3a2` (2026-09) · stable-baselines3 2.9 ·
-torch 2.14 / transformers 5.17 / peft 0.21 · yfinance 0.2.66 (pinned: 1.x breaks FinRL's downloader) ·
+torch 2.14 / transformers 5.17 / peft 0.21 · yfinance 0.2.66 in the FinRL env (1.x drops the `proxy`
+argument its downloader passes) and 1.7.0 elsewhere ·
 React 19 / Vite 8 / Lightweight Charts 5.
 
 ## License
