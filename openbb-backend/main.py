@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from widgets import eps_trend, finrl_signal, institutional, live_quote
+from widgets import eps_trend, finrl_signal, institutional, live_quote, news
 
 app = FastAPI(title="FOMO Workbench backend")
 app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+", allow_methods=["*"], allow_headers=["*"])
@@ -13,6 +13,7 @@ app.include_router(finrl_signal.router)
 app.include_router(eps_trend.router)
 app.include_router(institutional.router)
 app.include_router(live_quote.router)
+app.include_router(news.router)
 
 
 @app.get("/widgets.json")

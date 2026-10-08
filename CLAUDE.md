@@ -65,7 +65,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - **測試**（純函式，不需要服務）：`cd ui && npx vitest run`；`cd agent && ../envs/fingpt/bin/python -m pytest`；`cd openbb-backend && ../envs/finrl/bin/python -m pytest`。改了 `applyTick`／`rrg.ts`／`squarify.ts`／`darkpool.ts`／`_gemini_schema`／`last_complete_session` 要跑；純邏輯放在元件旁的 `.ts` 檔（不是元件檔內），測試才 import 得到。
 
 **程式碼位置**（自寫的膠水層約 2.5k 行）：
-- `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
+- `openbb-backend/main.py` + `widgets/{finrl_signal,eps_trend,institutional,live_quote,news}.py`，`baskets.json`（FinRL 模型籃定義，Phase 17），`widgets.json`（OpenBB Workspace 規格，目前沒有消費端）
 - `training/train_basket.py`：依 `baskets.json` 訓練一組籃子的 5 個 agent（`cd training && ../envs/finrl/bin/python train_basket.py tech30`，約 10–20 分鐘）
 - `agent/main.py`（SSE 端點 + `/watchlist`、`/brief`、`/brief/run`）、`loop.py`（Gemini 迴圈）、`brief.py`（每日簡報 + 排程）、`resummarize.py`（補回缺失的摘要）、`tools/{fingpt_tool,finrl_tool}.py`；金鑰在 `agent/.env`，watchlist 在 `agent/watchlist.json`，簡報在 `agent/briefs/<as_of>.json`（三者都 gitignore）
 - `ui/src/App.tsx`（版面、`view: market|stock`、六個分頁、共用 state）、`api.ts`（所有 fetch）、`i18n.ts`（EN／繁中）、`components/{market,fundamentals,technical,news,ownership,financials}/` 一卡一檔
@@ -81,7 +81,8 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 分鐘 K 的時間戳是 ET 牆鐘字串，UI 把它當 UTC 丟給 Lightweight Charts，軸上才會顯示美東時間。
 
 **openbb-api / yfinance**
-- 一律走 openbb-api，provider 固定 `yfinance`（agent 端注入、不讓 LLM 選到付費供應商）。只有三個 widget 例外直接用 `yfinance` 套件：`eps_trend`（openbb 的 EPS 歷史／預估只有付費 provider）、`institutional`（13F 只有 fmp）、`live_quote`（openbb 沒有串流；Yahoo 非官方 WebSocket，壞了 UI 自動退回 60 秒輪詢）。
+- 一律走 openbb-api，provider 固定 `yfinance`（agent 端注入、不讓 LLM 選到付費供應商）。只有四個 widget 例外直接用 `yfinance` 套件：`eps_trend`（openbb 的 EPS 歷史／預估只有付費 provider）、`institutional`（13F 只有 fmp）、`live_quote`（openbb 沒有串流；Yahoo 非官方 WebSocket，壞了 UI 自動退回 60 秒輪詢）、`news`（見下一條）。
+- **公司新聞不要走 `news/company`（2026-10 起壞掉）**：openbb 的 yfinance provider 走 `Ticker.news`，而 Yahoo 在 2026-10 初把它清空了——回 0 筆 → openbb 回 **204 No Content** → 消費端 `r.json()` 炸在空 body 上。症狀是簡報裡每天 8 個 `Expecting value: line 1 column 1`、消息面分頁顯示 no data，而且**完全沒有其他跡象**（實際無聲壞了 9 天）。升級 yfinance 沒用（1.7.0 的 `Ticker.news` 一樣是 0 筆）。`yf.Search(ticker, news_count=N).news` 仍然有資料，所以 `openbb-backend/widgets/news.py` 直接用它，UI 與 FinGPT 都改打 `8001/news/{ticker}`。Search 是文字搜尋，因此用 `relatedTickers` 含該代號當相關性過濾；時間戳是 epoch，輸出成帶 `Z` 的 UTC（openbb 原本給的是 naive 字串，瀏覽器會當成本地時間，等於每則都位移了時區差）。
 - `yfinance` 釘 **0.2.66**：1.x 拿掉 `proxy` 參數會弄壞 FinRL 的 `YahooDownloader`（守則 #4 不改上游）；0.2.58 的財報資料停在 2025-05。`pip install -e FinRL` 帶依賴會把它降回 0.2.58，所以要 `--no-deps`。
 - finviz provider（screener／sector groups）是同步阻塞、約 10 秒，會卡住整個 openbb-api——這是 6900 開 **3 個 worker** 的原因（`openbb-api` 啟動器的 `--workers` 有 bug，要直接起 uvicorn）。
 - yfinance 偶爾會回傳「有 open/high/low/volume 但 `close` 是 `null`」的 K 棒（2026-09-23 實際遇到，那天的 09-22 就是這樣；帶 `adjustment=splits_and_dividends` 的查詢則是整根消失）。`api.ts` 的 `fetchHistory` 會過濾掉 `close == null` 的棒——在源頭擋掉，否則 TopBar 的 `last.toFixed()` 會讓整棵 React 樹崩成空白頁。
@@ -110,6 +111,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 上游 `app.py` 一 import 就載 gated 模型、`prompt.py` 的 helper 吃 Finnhub 資料列，兩者都不能 import；系統提示與 `[INST]`／`<<SYS>>` 標記是從 `app.py` **原樣複製**（檔頭註明）。基礎模型用 `NousResearch/Llama-2-7b-chat-hf`（非 gated 鏡像）。
 - MPS fp16 約 6 tok/s，單次 60–90 秒；`_lock` 讓同時兩個請求排隊而不是搶 MPS。`do_sample=True`（上游預設）每次輸出不同；模型只在 DOW 30 上微調過。
 - 輸出格式 `[Positive Developments]:` / `[Potential Concerns]:` / `[Prediction & Analysis]`，`Prediction: Up/Down by X-Y%` 一行可用正則抓。
+- prompt 的新聞段落**從 2026-10-08 起只有 `[Headline]`、沒有 `[Summary]`**（上游格式兩者都有）：新的來源 `yf.Search` 不提供摘要。等於 FinGPT 的輸入比 9 月那幾天少了一層資訊，品質可能略降。
 
 **Agent（`agent/loop.py`）**
 - 給 Gemini 的工具有 7 個：openbb-mcp 的 `equity_profile / equity_price_quote / equity_price_historical / news_company / equity_fundamental_metrics`（schema 去掉 `provider`）+ 本機 `fingpt_forecast` + `finrl_signal`（2026-09-21 加，`tools/finrl_tool.py`，打 8001 的端點；docstring 就是給模型的工具說明，`shares`／`position` 語意寫在裡面，模型才不會誤讀）。加工具的模式：`tools/` 新增一檔 + `loop.py` 一個 `FunctionDeclaration` + `call_tool` 一個分支。無對話記憶、無狀態。Gemini 免費層偶發 429/503，`_generate` 有 4 次退避重試；但**每日配額**的 429（訊息含 `PerDay`）直接放棄不重試。**`gemini-3.6-flash` 免費層每天只有 20 次 generate**：簡報固定 1 次、每個聊天問題 2–3 次，測試時很容易在下午就用完（2026-09-21 實際發生），用完後聊天完全不能用直到太平洋時間午夜重置；換模型用 `agent/.env` 的 `GEMINI_MODEL`。

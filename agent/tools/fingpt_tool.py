@@ -16,6 +16,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 OPENBB_API = "http://127.0.0.1:6900/api/v1"
+BACKEND = "http://127.0.0.1:8001"  # our own widgets; news lives here now (openbb's provider went empty)
 ET = ZoneInfo("America/New_York")
 MARKET_CLOSE = time(16, 0)
 BASE_MODEL = "NousResearch/Llama-2-7b-chat-hf"
@@ -80,7 +81,9 @@ def _weekly_blocks(ticker, today):
         bounds.append(next(d for d in dates if d >= step.isoformat()))
     bounds.append(dates[-1])
 
-    news = _get("news/company", symbol=ticker, limit=NEWS_PER_WEEK * N_WEEKS)
+    r = requests.get(f"{BACKEND}/news/{ticker}", params={"limit": NEWS_PER_WEEK * N_WEEKS}, timeout=60)
+    r.raise_for_status()
+    news = r.json()
     blocks = []
     for i, (start, end) in enumerate(zip(bounds[:-1], bounds[1:])):
         # news windows are calendar weeks ending at `today` (upstream get_news), independent of the price
@@ -88,7 +91,8 @@ def _weekly_blocks(ticker, today):
         lo, hi = steps[i].isoformat(), steps[i + 1].isoformat()
         items = [n for n in news if lo <= n["date"][:10] <= hi][:NEWS_PER_WEEK]
         blocks.append((start, end, closes[start], closes[end],
-                       ["[Headline]: {}\n[Summary]: {}\n".format(n["title"], n.get("summary") or n.get("text") or "") for n in items]))
+                       # upstream also passed [Summary]; the search feed carries headlines only
+                       ["[Headline]: {}\n".format(n["title"]) for n in items]))
     return blocks
 
 

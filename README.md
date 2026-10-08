@@ -73,8 +73,10 @@ Dark, exchange-style UI (React + Tailwind + TradingView Lightweight Charts), Eng
 ```
 
 - **Data layer — OpenBB Platform** (`openbb-api`). Every widget goes through it unless it lacks a
-  free provider for that item (EPS history/estimates, 13F holders, real-time ticks) — those three
-  use the `yfinance` package directly inside `openbb-backend/widgets/`, one file each.
+  free provider for that item (EPS history/estimates, 13F holders, real-time ticks) or its provider
+  broke (company news: Yahoo emptied the endpoint openbb reads, so the backend reads the same
+  stories through `yf.Search`) — those four use the `yfinance` package directly inside
+  `openbb-backend/widgets/`, one file each.
 - **Signal layer — FinRL.** Five agents (A2C/DDPG/PPO/TD3/SAC) trained jointly on a basket of 30
   stocks. The endpoint rebuilds the exact upstream feature pipeline and environment from OpenBB
   data, replays the last 60 sessions, and reports each agent's intent for today, its simulated

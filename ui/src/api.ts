@@ -152,8 +152,9 @@ export type NewsItem = { date: string; title: string; url: string; source?: stri
 export type Filing = { filing_date: string; report_date?: string; primary_doc_description?: string; items?: string; report_url?: string; filing_detail_url?: string }
 
 export async function fetchNews(ticker: string): Promise<NewsItem[]> {
-  const d = await json<{ results: NewsItem[] }>(`${OPENBB}/api/v1/news/company?symbol=${ticker}&provider=yfinance&limit=10`)
-  return d.results.map(({ date, title, url, source }) => ({ date, title, url, source })).sort((a, b) => b.date.localeCompare(a.date))
+  // openbb-api's yfinance news provider returns 204 since Yahoo emptied Ticker.news; the backend
+  // reads the same stories through yf.Search instead, already filtered and newest first.
+  return json<NewsItem[]>(`${BACKEND}/news/${ticker}`)
 }
 export async function fetchFilings(ticker: string): Promise<Filing[]> {
   return (await json<{ results: Filing[] }>(`${OPENBB}/api/v1/equity/fundamental/filings?symbol=${ticker}&provider=sec&form_type=8-K&limit=10`)).results
