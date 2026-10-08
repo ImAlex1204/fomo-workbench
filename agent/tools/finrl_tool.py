@@ -5,7 +5,7 @@ next to FinGPT. The interpretation notes in the docstring are what Gemini sees a
 description. Equity curves are dropped here: only their return_pct matters to the model, and the
 raw arrays would be 60 numbers per agent per basket.
 """
-import requests
+from . import http
 
 BACKEND = "http://127.0.0.1:8001"
 KEEP = ("agent", "action", "shares", "position", "return_pct")
@@ -23,7 +23,7 @@ def signal(ticker: str) -> dict:
     `return_pct` = that simulated basket portfolio's 60-session return. The five agents are
     independent and often disagree; report each one, do not invent a consensus. Tickers in no basket
     return an error. Not investment advice."""
-    r = requests.get(f"{BACKEND}/finrl/signal/{ticker.upper()}", timeout=120)
+    r = http.get(f"{BACKEND}/finrl/signal/{ticker.upper()}", timeout=120, passthrough=(404,))
     if r.status_code == 404:  # not_covered: expected for non-members, so the UI greys it out instead of flagging it
         return {"error": r.json().get("detail", f"{ticker.upper()} is in no FinRL model basket"), "not_covered": True}
     r.raise_for_status()

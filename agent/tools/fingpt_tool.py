@@ -10,10 +10,11 @@ import threading
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-import requests
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+
+from . import http
 
 OPENBB_API = "http://127.0.0.1:6900/api/v1"
 BACKEND = "http://127.0.0.1:8001"  # our own widgets; news lives here now (openbb's provider went empty)
@@ -38,8 +39,10 @@ _lock = threading.Lock()  # one load/generate at a time: concurrent runs fight f
 
 
 def _get(path, **params):
-    r = requests.get(f"{OPENBB_API}/{path}", params={"provider": "yfinance", **params}, timeout=60)
+    r = http.get(f"{OPENBB_API}/{path}", params={"provider": "yfinance", **params})
     r.raise_for_status()
+    if not r.content:  # openbb answers 204 when a provider has nothing; .json() would just say
+        raise RuntimeError(f"{path} returned no content (HTTP {r.status_code})")  # "Expecting value: line 1 column 1"
     return r.json()["results"]
 
 
@@ -81,7 +84,7 @@ def _weekly_blocks(ticker, today):
         bounds.append(next(d for d in dates if d >= step.isoformat()))
     bounds.append(dates[-1])
 
-    r = requests.get(f"{BACKEND}/news/{ticker}", params={"limit": NEWS_PER_WEEK * N_WEEKS}, timeout=60)
+    r = http.get(f"{BACKEND}/news/{ticker}", params={"limit": NEWS_PER_WEEK * N_WEEKS})
     r.raise_for_status()
     news = r.json()
     blocks = []
