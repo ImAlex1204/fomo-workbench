@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchBrief, fetchWatchlist, runBrief, saveWatchlist, type BriefStatus } from '../../api'
 import type { Lang, Strings } from '../../i18n'
-import { covered, dir, failures, tally } from './brief'
+import { covered, dir, failures, tally, weekdaysBehind } from './brief'
 
 export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strings; onSelect: (symbol: string) => void }) {
   const [st, setSt] = useState<BriefStatus | null>(null)
@@ -23,6 +23,8 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
   const summary = brief?.summary?.[lang] ?? brief?.summary?.en ?? null
   const items = new Map((brief?.items ?? []).map(i => [i.ticker, i]))
   const fail = brief?.items?.length ? failures(brief.items) : null
+  // One or two weekdays behind is just a market holiday; a warning that cries wolf gets ignored.
+  const behind = brief && st?.expected_as_of ? weekdaysBehind(brief.as_of, st.expected_as_of) : 0
 
   return (
     <section className="panel p-4">
@@ -36,6 +38,11 @@ export default function DailyBrief({ lang, s, onSelect }: { lang: Lang; s: Strin
         </div>
       </div>
       {!st ? <p className="text-sm text-ink-3">…</p> : !brief && !st.running ? <p className="text-sm text-ink-3">{s.briefNone}</p> : null}
+      {behind >= 3 && (
+        <p className="mb-3 rounded-md border border-line bg-panel-2 px-2 py-1.5 text-xs text-ink-2">
+          {s.briefStale.replace('{n}', String(behind))}
+        </p>
+      )}
       {fail && (fail.fingpt > 0 || fail.finrl > 0) && (
         <p className="mb-3 rounded-md border border-down/40 bg-down/10 px-2 py-1.5 text-xs text-down" title={fail.first}>
           {[fail.fingpt && `${s.briefFailFingpt} ${fail.fingpt}/${fail.total}`, fail.finrl && `${s.briefFailFinrl} ${fail.finrl}/${fail.total}`].filter(Boolean).join(' · ')}

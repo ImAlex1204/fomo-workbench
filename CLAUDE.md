@@ -133,6 +133,7 @@ Phase 1–16 全部完成，細節與當時的決策過程在 `docs/phases.md`�
 - 頂欄的代號輸入框永遠帶著現在的代號，所以打字應該是**取代**而不是插入：`onFocus` 全選，送出後再全選一次（焦點會留在框內，不然下一次打字會接在後面變成 `AAPLAAPL`）。
 - 頂欄價格用獨立的 1Y 日 K（`daily`）算，不隨區間變；技術面分頁共用同一份。`metrics` 在 `App.tsx` 抓一次，基本面與技術面共用。
 - 首頁第一張卡是每日簡報（`market/DailyBrief.tsx`，純邏輯在隔壁 `market/brief.ts`），每 30 秒輪詢 `/brief`，watchlist 增刪直接 `PUT /watchlist`；`Market` 多接一個 `lang` prop 以選摘要語言。
+- **簡報過期要看得見**（2026-10-08 加）：`/brief` 多回一個 `expected_as_of`（`brief.expected_session()`：最後一個已收盤交易日，週末往前走到週五），UI 的 `weekdaysBehind()` 算差幾個工作日，**≥3 才顯示**灰色提示。門檻不是 1 是因為 `last_complete_session()` 不知道美股假日，單日假期會讓它永遠落後 1 天——會誤報的警示等於沒有警示。
 - **引擎失敗要看得見**（2026-10-08 加）：簡報卡上方有紅色橫幅顯示「FinGPT 失敗 n/N · FinRL 失敗 n/N」，列上用紅色 `✕` 標該檔、tooltip 是原始錯誤。這是因為 FinGPT 曾經無聲掛掉 9 天（卡片只是留白，沒有任何提示）。**「這檔不在任何籃子」不算失敗**，顯示灰色 `—`：`finrl_tool` 的 404 分支會標 `not_covered: true`，`brief.ts` 的 `covered()` 另外用錯誤訊息比對當 fallback，這樣舊的簡報檔不會誤報——警示系統只要開始誤報就沒人看了。
 - 聊天面板有兩顆快捷鈕：「FinGPT → 代號」與「FinRL × FinGPT → 代號」（後者送出比較問題，讓模型同時呼叫兩個工具並指出分歧）。回答用 `react-markdown` + `remark-gfm` 渲染（模型比較五個 agent 時會出表格，沒有 gfm 會變成一串 `|`）。
 - 版權：新聞只顯示標題／日期／來源／連結，`NewsItem` 型別刻意不宣告 `summary`／`text`。

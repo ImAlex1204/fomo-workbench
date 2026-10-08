@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BriefItem } from '../../api'
-import { covered, dir, failures, tally } from './brief'
+import { covered, dir, failures, tally, weekdaysBehind } from './brief'
 
 const basket = (buy: number, sell: number, label = 'DOW 30 · 2014') => ({
   basket: label, trained_on: '2014..2025', as_of: '2026-10-07', close: 100,
@@ -49,5 +49,31 @@ describe('tally / dir', () => {
     expect(dir('Up by 2-3%')).toBe('up')
     expect(dir('Down by 0-1%')).toBe('down')
     expect(dir(null)).toBe('flat')
+  })
+})
+
+describe('weekdaysBehind', () => {
+  it('is zero when the brief covers the expected session', () => {
+    expect(weekdaysBehind('2026-10-07', '2026-10-07')).toBe(0)
+  })
+
+  it('counts weekdays only, skipping the weekend', () => {
+    // Fri 10-09 -> Mon 10-12 is one trading day, not three
+    expect(weekdaysBehind('2026-10-09', '2026-10-12')).toBe(1)
+  })
+
+  it('stays under the alarm threshold for a one-day market holiday', () => {
+    // brief covers Wed, expected is Thu because last_complete_session cannot know Thu was a holiday
+    expect(weekdaysBehind('2026-10-07', '2026-10-08')).toBe(1)
+    expect(weekdaysBehind('2026-10-06', '2026-10-08')).toBe(2)
+  })
+
+  it('crosses the threshold for the real outage', () => {
+    // the 2026-09-30 brief was still the newest on 2026-10-07
+    expect(weekdaysBehind('2026-09-30', '2026-10-07')).toBe(5)
+  })
+
+  it('does not go negative if the brief is somehow ahead', () => {
+    expect(weekdaysBehind('2026-10-08', '2026-10-07')).toBe(0)
   })
 })

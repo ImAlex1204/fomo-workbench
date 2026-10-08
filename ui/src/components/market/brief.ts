@@ -13,6 +13,22 @@ export const tally = (item: BriefItem) => {
   return { ...all[0], detail: all.map(a => `${a.label}: ${a.buy}B / ${a.sell}S`).join('\n') }
 }
 
+const MS_DAY = 86400e3
+
+/** Weekdays strictly after `asOf` up to and including `expected`.
+ *
+ *  Market holidays are not in the calendar either side, so a brief can sit one or two weekdays
+ *  behind without anything being wrong; only a bigger gap means the services were not running.
+ *  Dates are 'YYYY-MM-DD' and are read as UTC so the viewer's timezone cannot shift the count. */
+export function weekdaysBehind(asOf: string, expected: string): number {
+  let n = 0
+  for (let t = Date.parse(`${asOf}T00:00:00Z`) + MS_DAY; t <= Date.parse(`${expected}T00:00:00Z`); t += MS_DAY) {
+    const day = new Date(t).getUTCDay()
+    if (day !== 0 && day !== 6) n++
+  }
+  return n
+}
+
 /** A ticker that simply has no FinRL basket. Briefs written before the flag existed only carry
  *  the backend's 404 detail, so fall back to that rather than raising a false alarm on them. */
 export const covered = (i: BriefItem) => !!i.finrl?.not_covered || /no FinRL model basket|not in any FinRL/i.test(i.finrl?.error ?? '')

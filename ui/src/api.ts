@@ -292,7 +292,8 @@ export type BriefItem = {
 }
 export type Brief = { as_of: string; generated_at: string | null; tickers: string[]; items: BriefItem[];
   summary: Record<'en' | 'zh', { overview: string; tickers: Record<string, string> }> | null }
-export type BriefStatus = { running: boolean; progress: [number, number] | null; brief: Brief | null }
+export type BriefStatus = { running: boolean; progress: [number, number] | null; brief: Brief | null
+  expected_as_of?: string }  // the session the newest brief should cover (agent/brief.py)
 
 export const fetchBrief = () => json<BriefStatus>(`${AGENT}/brief`)
 export const fetchWatchlist = () => json<string[]>(`${AGENT}/watchlist`)

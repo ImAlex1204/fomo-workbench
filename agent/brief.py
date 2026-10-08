@@ -11,7 +11,7 @@ FinGPT calls take the same lock as the chat tool, so a brief never fights the da
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from google import genai
@@ -68,8 +68,18 @@ def latest_brief() -> dict | None:
     return json.loads(files[-1].read_text()) if files else None
 
 
+def expected_session() -> date:
+    """The session the newest brief should cover: the last completed one, walked back over a weekend
+    because scheduler() only runs on weekdays. Market holidays are not known here, so a brief may
+    legitimately sit one or two weekdays behind this — only a larger gap means something was off."""
+    d = fingpt_tool.last_complete_session()
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def status() -> dict:
-    return {**_state, "brief": latest_brief()}
+    return {**_state, "brief": latest_brief(), "expected_as_of": expected_session().isoformat()}
 
 
 def _save(brief: dict):
